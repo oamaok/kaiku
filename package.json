@@ -2,15 +2,19 @@
   "name": "kaiku",
   "version": "1.0.0",
   "description": "Lightweight UI framework",
+  "license": "MIT",
+  "author": "Teemu Pääkkönen",
   "main": "dist/kaiku.js",
   "types": "dist/kaiku.d.ts",
+  "files": [
+    "./dist/*"
+  ],
   "scripts": {
     "test": "jest",
     "build": "node build.js",
-    "prettier": "prettier --write ."
+    "prettier": "prettier --write .",
+    "prepublish": "yarn prettier && yarn build"
   },
-  "author": "Teemu Pääkkönen",
-  "license": "MIT",
   "dependencies": {},
   "devDependencies": {
     "esbuild": "^0.12.15",
