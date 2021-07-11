@@ -234,6 +234,7 @@ function createState<StateT extends Object>(
       },
     })
 
+    // Recursively wrap all fields of the object by invoking the `set()` function
     const keys = Object.keys(obj) as (keyof T)[]
     for (const key of keys) {
       proxy[key] = proxy[key]
@@ -337,6 +338,23 @@ function createHtmlTagDescriptor(
   }
 }
 
+function stringifyClassNames(names: ClassNames): string {
+  if (typeof names === 'string') {
+    return names
+  }
+
+  if (Array.isArray(names)) {
+    return names.map((name) => stringifyClassNames(name)).join(' ')
+  }
+
+  let className = ''
+  const keys = Object.keys(names)
+  for (const key of keys) {
+    if (names[key]) className += key
+  }
+  return className
+}
+
 function createHtmlTag<StateT>(
   descriptor: HtmlTagDescriptor,
   context: KaikuContext<StateT>
@@ -372,22 +390,26 @@ function createHtmlTag<StateT>(
           element.addEventListener(eventName as any, nextProps[key] as any)
         }
       } else {
-        if (key === 'checked') {
-          ;(element as HTMLInputElement).checked = !!nextProps[key]
-
-          continue
-        }
-
-        if (key === 'value' && key in nextProps) {
-          ;(element as HTMLInputElement).value = nextProps[key] ?? ''
-          continue
+        switch (key) {
+          case 'checked': {
+            ;(element as HTMLInputElement).checked = !!nextProps[key]
+            continue
+          }
+          case 'value': {
+            ;(element as HTMLInputElement).value = nextProps[key] ?? ''
+            continue
+          }
+          case 'className': {
+            element.setAttribute(
+              'class',
+              stringifyClassNames(nextProps[key] ?? '')
+            )
+            continue
+          }
         }
 
         if (key in nextProps) {
-          element.setAttribute(
-            key === 'className' ? 'class' : key,
-            nextProps[key] as any
-          )
+          element.setAttribute(key, nextProps[key] as any)
         } else {
           element.removeAttribute(key)
         }
@@ -473,8 +495,6 @@ function createHtmlTag<StateT>(
     previousChildren = []
 
     for (const action of actions) {
-      console.log(action)
-
       switch (action.type) {
         case ActionType.CreateText: {
           const node = document.createTextNode(String(action.value))
