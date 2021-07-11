@@ -7,6 +7,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { CssProperties } from './css-properties'
+
 const ADD_STATE_DEPENDENCY = Symbol()
 const REMOVE_STATE_DEPENDENCY = Symbol()
 const START_DEPENDENCY_TRACKING = Symbol()
@@ -35,6 +37,7 @@ type ClassNames = string | { [key: string]: boolean } | ClassNames[]
 
 type HtmlTagProps = Partial<{
   id: string | number
+  style: Partial<Record<CssProperties, string>>
   className: string
   classNames: ClassNames
   onClick: Function
@@ -114,6 +117,11 @@ type Action =
       element: Element<any>
       descriptor: ElementDescriptor<any>
     }
+
+type Effect = {
+  run: () => void
+  unregister: () => void
+}
 
 function createState<StateT extends Object>(
   initialState: StateT
@@ -248,6 +256,68 @@ function createState<StateT extends Object>(
   return state as State<StateT>
 }
 
+function createEffect() {
+  let currentState: State<any> | null = null
+  let registerEffects = false
+  const effects: Effect[][] = []
+
+  function startEffectTracking(state: State<any>) {
+    currentState = state
+    registerEffects = true
+    effects.push([])
+  }
+
+  function stopEffectTracking() {
+    currentState = null
+    registerEffects = false
+    const effs = effects.pop()
+    if (!effs) {
+      throw new Error(
+        'stopEffectTracking() called without a matching start call'
+      )
+    }
+    return effs
+  }
+
+  function effect(fn: Function) {
+    if (!registerEffects) return
+    let deps = new Set()
+
+    const run = () => {
+      if (!currentState) return
+
+      for (const dep of deps) {
+        currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
+      }
+
+      currentState[START_DEPENDENCY_TRACKING]()
+      fn()
+      deps = currentState[STOP_DEPENDENCY_TRACKING]()
+
+      for (const dep of deps) {
+        currentState[ADD_STATE_DEPENDENCY](dep, fn)
+      }
+    }
+
+    run()
+
+    const unregister = () => {
+      for (const dep of deps) {
+        currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
+      }
+    }
+
+    effects[effects.length - 1].push({
+      run,
+      unregister,
+    })
+  }
+
+  return { startEffectTracking, stopEffectTracking, effect }
+}
+
+const { startEffectTracking, stopEffectTracking, effect } = createEffect()
+
 function createComponentDescriptor<PropsT>(
   component: ComponentFunction<PropsT>,
   props: PropsT,
@@ -267,17 +337,25 @@ function createComponent<PropsT, StateT>(
 ): Component<PropsT> {
   let dependencies = new Set<string>()
   let prevLeaf: Element | null = null
-
   let prevProps: PropsT = descriptor.props
+  let effects: Effect[] | null = null
 
   function update(nextProps: PropsT = prevProps) {
     for (const dep of dependencies) {
       context.state[REMOVE_STATE_DEPENDENCY](dep, update)
     }
 
+    if (effects === null) {
+      startEffectTracking(context.state)
+    }
+
     context.state[START_DEPENDENCY_TRACKING]()
     const leafDescriptor = descriptor.component(nextProps)
     dependencies = context.state[STOP_DEPENDENCY_TRACKING]()
+
+    if (effects === null) {
+      effects = stopEffectTracking()
+    }
 
     for (const dep of dependencies) {
       context.state[ADD_STATE_DEPENDENCY](dep, update)
@@ -391,6 +469,17 @@ function createHtmlTag<StateT>(
         }
       } else {
         switch (key) {
+          case 'style': {
+            const properties = new Set([
+              ...Object.keys(nextProps.style || {}),
+              ...Object.keys(prevProps.style || {}),
+            ]) as Set<CssProperties>
+
+            for (const property of properties) {
+              element.style[property as any] = nextProps.style?.[property] ?? ''
+            }
+            continue
+          }
           case 'checked': {
             ;(element as HTMLInputElement).checked = !!nextProps[key]
             continue
