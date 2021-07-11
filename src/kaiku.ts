@@ -7,7 +7,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { CssProperties } from './css-properties'
+import { CssProperty } from './css-properties'
+import { HtmlAttribute } from './html-attributes'
 
 const ADD_STATE_DEPENDENCY = Symbol()
 const REMOVE_STATE_DEPENDENCY = Symbol()
@@ -35,16 +36,17 @@ type ComponentFunction<PropsT extends Object> = (
 
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
 
-type HtmlTagProps = Partial<{
-  id: string | number
-  style: Partial<Record<CssProperties, string>>
-  className: string
-  classNames: ClassNames
-  onClick: Function
-  onInput: Function
-  checked: boolean
-  value: string
-}>
+type HtmlTagProps = Partial<Record<HtmlAttribute, string>> &
+  Partial<{
+    id: string | number
+    style: Partial<Record<CssProperty, string>>
+    className: string
+    classNames: ClassNames
+    onClick: Function
+    onInput: Function
+    checked: boolean
+    value: string
+  }>
 
 const enum ElementDescriptorType {
   HtmlTag,
@@ -473,7 +475,7 @@ function createHtmlTag<StateT>(
             const properties = new Set([
               ...Object.keys(nextProps.style || {}),
               ...Object.keys(prevProps.style || {}),
-            ]) as Set<CssProperties>
+            ]) as Set<CssProperty>
 
             for (const property of properties) {
               element.style[property as any] = nextProps.style?.[property] ?? ''
@@ -498,7 +500,7 @@ function createHtmlTag<StateT>(
         }
 
         if (key in nextProps) {
-          element.setAttribute(key, nextProps[key] as any)
+          element.setAttribute(key, String(nextProps[key]))
         } else {
           element.removeAttribute(key)
         }
@@ -694,4 +696,4 @@ function render<PropsT, StateT>(
   createElement<PropsT, StateT>(rootDescriptor, { state, parentNode: element })
 }
 
-export { h, render, createState }
+export { h, render, createState, effect }

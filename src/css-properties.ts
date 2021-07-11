@@ -1,4 +1,4 @@
-type CssProperties =
+type CssProperty =
   | 'alignContent'
   | 'alignItems'
   | 'alignSelf'
@@ -425,4 +425,4 @@ type CssProperties =
   | 'wrapThrough'
   | 'writingMode'
   | 'zIndex'
-export { CssProperties }
+export { CssProperty }

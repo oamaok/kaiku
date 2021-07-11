@@ -7,7 +7,7 @@
   "main": "dist/kaiku.js",
   "types": "dist/kaiku.d.ts",
   "files": [
-    "./dist/*"
+    "dist/*"
   ],
   "scripts": {
     "test": "jest",
