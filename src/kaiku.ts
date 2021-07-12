@@ -290,19 +290,20 @@ function createEffect() {
   }
 
   function effect(fn: Function) {
+    const state = currentState
     let dependencies = new Set()
 
     const run = () => {
-      if (!currentState) return
-      const [nextDependencies] = currentState[TRACKED_EXECUTE](fn)
-      currentState[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
+      if (!state) return
+      const [nextDependencies] = state[TRACKED_EXECUTE](fn)
+      state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
       dependencies = nextDependencies
     }
 
     run()
 
     const unregister = () => {
-      currentState[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
+      state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
     }
 
     effects[effects.length - 1].push({
