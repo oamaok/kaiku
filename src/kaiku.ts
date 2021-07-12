@@ -40,8 +40,7 @@ type HtmlTagProps = Partial<Record<HtmlAttribute, string>> &
   Partial<{
     id: string | number
     style: Partial<Record<CssProperty, string>>
-    className: string
-    classNames: ClassNames
+    className: ClassNames
     onClick: Function
     onInput: Function
     checked: boolean
@@ -129,7 +128,6 @@ function createState<StateT extends Object>(
   initialState: StateT
 ): State<StateT> {
   const IS_WRAPPED = Symbol()
-  let nextId = 0
   let trackDependencies = false
   let trackedDependencyStack: Set<string>[] = []
   let dependencyMap = new Map<string, Set<Function>>()
@@ -167,22 +165,25 @@ function createState<StateT extends Object>(
   }
 
   function addDependencies(key: string, callback: Function) {
-    if (!dependencyMap.has(key)) {
-      dependencyMap.set(key, new Set())
+    const deps = dependencyMap.get(key)
+    if (deps) {
+      deps.add(callback)
+    } else {
+      dependencyMap.set(key, new Set([callback]))
     }
-    dependencyMap.get(key)!.add(callback)
   }
 
   function removeDependency(key: string, callback: Function) {
-    if (dependencyMap.has(key)) {
-      dependencyMap.get(key)!.delete(callback)
-
-      if (dependencyMap.get(key)!.size === 0) {
+    const deps = dependencyMap.get(key)
+    if (deps) {
+      deps.delete(callback)
+      if (deps.size === 0) {
         dependencyMap.delete(key)
       }
     }
   }
 
+  let nextId = 0
   function wrap<T extends object>(obj: T) {
     const id = ++nextId
 
@@ -229,13 +230,14 @@ function createState<StateT extends Object>(
           target[key as keyof T] = value
         }
 
-        if (dependencyMap.has(dependencyKey)) {
+        const callbacks = dependencyMap.get(dependencyKey)
+        if (callbacks) {
           if (!deferredUpdateQueued) {
             deferredUpdateQueued = true
             window.queueMicrotask(deferredUpdate)
           }
 
-          for (const callback of dependencyMap.get(dependencyKey)!) {
+          for (const callback of callbacks) {
             deferredUpdates.add(callback)
           }
         }
@@ -283,28 +285,34 @@ function createEffect() {
 
   function effect(fn: Function) {
     if (!registerEffects) return
-    let deps = new Set()
+    let dependencies = new Set()
 
     const run = () => {
       if (!currentState) return
 
-      for (const dep of deps) {
-        currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
-      }
-
       currentState[START_DEPENDENCY_TRACKING]()
       fn()
-      deps = currentState[STOP_DEPENDENCY_TRACKING]()
+      const nextDependencies = currentState[STOP_DEPENDENCY_TRACKING]()
 
-      for (const dep of deps) {
-        currentState[ADD_STATE_DEPENDENCY](dep, fn)
+      for (const dep of dependencies) {
+        if (!nextDependencies.has(dep)) {
+          currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
+        }
       }
+
+      for (const dep of nextDependencies) {
+        if (!dependencies.has(dep)) {
+          currentState[ADD_STATE_DEPENDENCY](dep, fn)
+        }
+      }
+
+      dependencies = nextDependencies
     }
 
     run()
 
     const unregister = () => {
-      for (const dep of deps) {
+      for (const dep of dependencies) {
         currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
       }
     }
@@ -343,25 +351,31 @@ function createComponent<PropsT, StateT>(
   let effects: Effect[] | null = null
 
   function update(nextProps: PropsT = prevProps) {
-    for (const dep of dependencies) {
-      context.state[REMOVE_STATE_DEPENDENCY](dep, update)
-    }
-
     if (effects === null) {
       startEffectTracking(context.state)
     }
 
     context.state[START_DEPENDENCY_TRACKING]()
     const leafDescriptor = descriptor.component(nextProps)
-    dependencies = context.state[STOP_DEPENDENCY_TRACKING]()
+    const nextDependencies = context.state[STOP_DEPENDENCY_TRACKING]()
 
     if (effects === null) {
       effects = stopEffectTracking()
     }
 
     for (const dep of dependencies) {
-      context.state[ADD_STATE_DEPENDENCY](dep, update)
+      if (!nextDependencies.has(dep)) {
+        context.state[REMOVE_STATE_DEPENDENCY](dep, update)
+      }
     }
+
+    for (const dep of nextDependencies) {
+      if (!dependencies.has(dep)) {
+        context.state[ADD_STATE_DEPENDENCY](dep, update)
+      }
+    }
+
+    dependencies = nextDependencies
 
     if (
       leafDescriptor.type === ElementDescriptorType.Component &&
@@ -478,7 +492,10 @@ function createHtmlTag<StateT>(
             ]) as Set<CssProperty>
 
             for (const property of properties) {
-              element.style[property as any] = nextProps.style?.[property] ?? ''
+              if (nextProps.style?.[property] !== prevProps.style?.[property]) {
+                element.style[property as any] =
+                  nextProps.style?.[property] ?? ''
+              }
             }
             continue
           }
