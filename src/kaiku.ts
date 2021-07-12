@@ -14,7 +14,10 @@ const TRACKED_EXECUTE = Symbol()
 const UPDATE_DEPENDENCIES = Symbol()
 
 type State<T> = T & {
-  [TRACKED_EXECUTE]: <T>(fn: () => T) => [Set<string>, T]
+  [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
+    fn: F,
+    ...args: Parameters<F>
+  ) => [Set<string>, ReturnType<F>]
   [UPDATE_DEPENDENCIES]: (
     prevDependencies: Set<string>,
     nextDependencies: Set<string>,
@@ -148,9 +151,12 @@ function createState<StateT extends Object>(
     }
   }
 
-  function trackedExectute<T>(fn: () => T): [Set<string>, T] {
+  function trackedExectute<F extends (...args: any) => any>(
+    fn: F,
+    ...args: Parameters<F>
+  ): [Set<string>, ReturnType<F>] {
     trackedDependencyStack.push(new Set())
-    const result = fn()
+    const result = fn(...args)
     const dependencies = trackedDependencyStack.pop()
     return [dependencies!, result]
   }
@@ -345,7 +351,8 @@ function createComponent<PropsT, StateT>(
     }
 
     const [nextDependencies, leafDescriptor] = context.state[TRACKED_EXECUTE](
-      () => descriptor.component(nextProps)
+      descriptor.component,
+      nextProps
     )
     context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
     dependencies = nextDependencies
