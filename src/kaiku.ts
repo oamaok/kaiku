@@ -36,15 +36,15 @@ type ComponentFunction<PropsT extends Object> = (
 
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
 
-type HtmlTagProps = Partial<Record<HtmlAttribute, string>> &
+type LazyProperty<T> = T | (() => T)
+
+type HtmlTagProps = Partial<Record<HtmlAttribute, LazyProperty<string>>> &
   Partial<{
-    id: string | number
-    style: Partial<Record<CssProperty, string>>
+    style: Partial<Record<CssProperty, LazyProperty<string>>>
     className: ClassNames
     onClick: Function
     onInput: Function
     checked: boolean
-    value: string
   }>
 
 const enum ElementDescriptorType {
@@ -62,16 +62,18 @@ type ElementDescriptor<PropsT = {}> =
   | HtmlTagDescriptor
   | ComponentDescriptor<PropsT>
 
+type TagName = keyof HTMLElementTagNameMap
+
 type HtmlTagDescriptor = {
   type: ElementDescriptorType.HtmlTag
-  tag: string
+  tag: TagName
   props: HtmlTagProps
   children: Children
 }
 
 type HtmlTag = {
   type: ElementType.HtmlTag
-  tag: string
+  tag: TagName
   update: (nextProps: HtmlTagProps, children: Children) => void
   destroy: () => void
 }
@@ -164,7 +166,7 @@ function createState<StateT extends Object>(
     return deps
   }
 
-  function addDependencies(key: string, callback: Function) {
+  function addDependency(key: string, callback: Function) {
     const deps = dependencyMap.get(key)
     if (deps) {
       deps.add(callback)
@@ -187,6 +189,8 @@ function createState<StateT extends Object>(
   function wrap<T extends object>(obj: T) {
     const id = ++nextId
 
+    const isArray = Array.isArray(obj)
+
     const proxy = new Proxy(obj, {
       get(target, key) {
         switch (key) {
@@ -195,7 +199,7 @@ function createState<StateT extends Object>(
           case STOP_DEPENDENCY_TRACKING:
             return stopDependencyTracking
           case ADD_STATE_DEPENDENCY:
-            return addDependencies
+            return addDependency
           case REMOVE_STATE_DEPENDENCY:
             return removeDependency
           case IS_WRAPPED:
@@ -216,18 +220,28 @@ function createState<StateT extends Object>(
         return target[key as keyof T]
       },
 
-      set(target, key, value) {
+      set(target, _key, value) {
+        const key = _key as keyof T
+
+        if (
+          !(isArray && key === 'length') &&
+          typeof value !== 'object' &&
+          target[key] === value
+        ) {
+          return true
+        }
+
         if (typeof key === 'symbol') {
-          target[key as keyof T] = value
+          target[key] = value
           return true
         }
 
         const dependencyKey = id + '.' + key
 
         if (typeof value === 'object' && !value[IS_WRAPPED]) {
-          target[key as keyof T] = wrap(value)
+          target[key] = wrap(value)
         } else {
-          target[key as keyof T] = value
+          target[key] = value
         }
 
         const callbacks = dependencyMap.get(dependencyKey)
@@ -404,6 +418,12 @@ function createComponent<PropsT, StateT>(
       prevLeaf.destroy()
     }
 
+    if (effects) {
+      for (const effect of effects) {
+        effect.unregister()
+      }
+    }
+
     for (const dep of dependencies) {
       context.state[REMOVE_STATE_DEPENDENCY](dep, update)
     }
@@ -420,7 +440,7 @@ function createComponent<PropsT, StateT>(
 }
 
 function createHtmlTagDescriptor(
-  tag: string,
+  tag: TagName,
   props: HtmlTagProps,
   children: Children
 ): HtmlTagDescriptor {
@@ -449,6 +469,10 @@ function stringifyClassNames(names: ClassNames): string {
   return className
 }
 
+type LazyUpdate = {
+  unregister: () => void
+}
+
 function createHtmlTag<StateT>(
   descriptor: HtmlTagDescriptor,
   context: KaikuContext<StateT>
@@ -458,15 +482,67 @@ function createHtmlTag<StateT>(
     | Element
   )[] = []
   let prevProps: HtmlTagProps = {}
+  let lazyUpdates: LazyUpdate[] = []
 
   const element = document.createElement(descriptor.tag)
   context.parentNode.appendChild(element)
+
+  const lazy = (
+    prop: LazyProperty<string>,
+    handler: (value: string) => void
+  ) => {
+    if (typeof prop === 'string') {
+      handler(prop)
+      return
+    }
+
+    let dependencies = new Set<string>()
+
+    const update = () => {
+      context.state[START_DEPENDENCY_TRACKING]()
+      handler(prop())
+      const nextDependencies = context.state[STOP_DEPENDENCY_TRACKING]()
+
+      for (const dep of dependencies) {
+        if (!nextDependencies.has(dep)) {
+          context.state[REMOVE_STATE_DEPENDENCY](dep, update)
+        }
+      }
+
+      for (const dep of nextDependencies) {
+        if (!dependencies.has(dep)) {
+          context.state[ADD_STATE_DEPENDENCY](dep, update)
+        }
+      }
+
+      dependencies = nextDependencies
+    }
+
+    update()
+
+    if (dependencies.size === 0) {
+      return
+    }
+
+    lazyUpdates.push({
+      unregister() {
+        for (const dep of dependencies) {
+          context.state[REMOVE_STATE_DEPENDENCY](dep, update)
+        }
+      },
+    })
+  }
 
   function update(nextProps: HtmlTagProps, nextChildren: Children) {
     const keys = new Set([
       ...Object.keys(nextProps),
       ...Object.keys(prevProps),
     ]) as Set<keyof HtmlTagProps>
+
+    for (const lazyUpdate of lazyUpdates) {
+      lazyUpdate.unregister()
+    }
+    lazyUpdates = []
 
     for (const key of keys) {
       if (prevProps[key] === nextProps[key]) continue
@@ -493,8 +569,9 @@ function createHtmlTag<StateT>(
 
             for (const property of properties) {
               if (nextProps.style?.[property] !== prevProps.style?.[property]) {
-                element.style[property as any] =
-                  nextProps.style?.[property] ?? ''
+                lazy(nextProps.style?.[property] ?? '', (value) => {
+                  element.style[property as any] = value
+                })
               }
             }
             continue
@@ -504,7 +581,9 @@ function createHtmlTag<StateT>(
             continue
           }
           case 'value': {
-            ;(element as HTMLInputElement).value = nextProps[key] ?? ''
+            lazy(nextProps[key] ?? '', (value) => {
+              ;(element as HTMLInputElement).value = value
+            })
             continue
           }
           case 'className': {
@@ -517,7 +596,9 @@ function createHtmlTag<StateT>(
         }
 
         if (key in nextProps) {
-          element.setAttribute(key, String(nextProps[key]))
+          lazy(nextProps[key] as LazyProperty<string>, (value) => {
+            element.setAttribute(key, value)
+          })
         } else {
           element.removeAttribute(key)
         }
@@ -649,6 +730,11 @@ function createHtmlTag<StateT>(
   }
 
   function destroy() {
+    for (const lazyUpdate of lazyUpdates) {
+      lazyUpdate.unregister()
+    }
+    lazyUpdates = []
+
     context.parentNode.removeChild(element)
     for (const child of previousChildren) {
       if (child.type === ElementType.TextNode) {
@@ -696,7 +782,11 @@ function h(tagOrComponent: any, props: any, ...children: any) {
     }
 
     case 'string': {
-      return createHtmlTagDescriptor(tagOrComponent, props ?? {}, children)
+      return createHtmlTagDescriptor(
+        tagOrComponent as TagName,
+        props ?? {},
+        children
+      )
     }
 
     default: {
