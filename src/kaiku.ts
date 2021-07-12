@@ -10,16 +10,16 @@
 import { CssProperty } from './css-properties'
 import { HtmlAttribute } from './html-attributes'
 
-const ADD_STATE_DEPENDENCY = Symbol()
-const REMOVE_STATE_DEPENDENCY = Symbol()
-const START_DEPENDENCY_TRACKING = Symbol()
-const STOP_DEPENDENCY_TRACKING = Symbol()
+const TRACKED_EXECUTE = Symbol()
+const UPDATE_DEPENDENCIES = Symbol()
 
 type State<T> = T & {
-  [START_DEPENDENCY_TRACKING]: () => void
-  [STOP_DEPENDENCY_TRACKING]: () => Set<string>
-  [ADD_STATE_DEPENDENCY]: (key: string, callback: Function) => void
-  [REMOVE_STATE_DEPENDENCY]: (key: string, callback: Function) => void
+  [TRACKED_EXECUTE]: <T>(fn: () => T) => [Set<string>, T]
+  [UPDATE_DEPENDENCIES]: (
+    prevDependencies: Set<string>,
+    nextDependencies: Set<string>,
+    callback: Function
+  ) => void
 }
 
 type KaikuContext<StateT> = {
@@ -130,7 +130,6 @@ function createState<StateT extends Object>(
   initialState: StateT
 ): State<StateT> {
   const IS_WRAPPED = Symbol()
-  let trackDependencies = false
   let trackedDependencyStack: Set<string>[] = []
   let dependencyMap = new Map<string, Set<Function>>()
   let deferredUpdates = new Set<Function>()
@@ -149,38 +148,38 @@ function createState<StateT extends Object>(
     }
   }
 
-  function startDependencyTracking() {
+  function trackedExectute<T>(fn: () => T): [Set<string>, T] {
     trackedDependencyStack.push(new Set())
-    trackDependencies = true
+    const result = fn()
+    const dependencies = trackedDependencyStack.pop()
+    return [dependencies!, result]
   }
 
-  function stopDependencyTracking(): Set<string> {
-    trackDependencies = false
-    const deps = trackedDependencyStack.pop()
-    if (!deps) {
-      throw new Error(
-        'stopDependencyTracking() called without a matching start call'
-      )
+  function updateDependencies(
+    prevDependencies: Set<string>,
+    nextDependencies: Set<string>,
+    callback: Function
+  ) {
+    for (const depKey of nextDependencies) {
+      if (!prevDependencies.has(depKey)) {
+        const deps = dependencyMap.get(depKey)
+        if (deps) {
+          deps.add(callback)
+        } else {
+          dependencyMap.set(depKey, new Set([callback]))
+        }
+      }
     }
 
-    return deps
-  }
-
-  function addDependency(key: string, callback: Function) {
-    const deps = dependencyMap.get(key)
-    if (deps) {
-      deps.add(callback)
-    } else {
-      dependencyMap.set(key, new Set([callback]))
-    }
-  }
-
-  function removeDependency(key: string, callback: Function) {
-    const deps = dependencyMap.get(key)
-    if (deps) {
-      deps.delete(callback)
-      if (deps.size === 0) {
-        dependencyMap.delete(key)
+    for (const depKey of prevDependencies) {
+      if (!nextDependencies.has(depKey)) {
+        const deps = dependencyMap.get(depKey)
+        if (deps) {
+          deps.delete(callback)
+          if (deps.size === 0) {
+            dependencyMap.delete(depKey)
+          }
+        }
       }
     }
   }
@@ -194,14 +193,10 @@ function createState<StateT extends Object>(
     const proxy = new Proxy(obj, {
       get(target, key) {
         switch (key) {
-          case START_DEPENDENCY_TRACKING:
-            return startDependencyTracking
-          case STOP_DEPENDENCY_TRACKING:
-            return stopDependencyTracking
-          case ADD_STATE_DEPENDENCY:
-            return addDependency
-          case REMOVE_STATE_DEPENDENCY:
-            return removeDependency
+          case TRACKED_EXECUTE:
+            return trackedExectute
+          case UPDATE_DEPENDENCIES:
+            return updateDependencies
           case IS_WRAPPED:
             return true
         }
@@ -210,7 +205,7 @@ function createState<StateT extends Object>(
           return target[key as keyof T]
         }
 
-        if (trackDependencies) {
+        if (trackedDependencyStack.length) {
           const dependencyKey = id + '.' + key
           trackedDependencyStack[trackedDependencyStack.length - 1].add(
             dependencyKey
@@ -276,18 +271,15 @@ function createState<StateT extends Object>(
 
 function createEffect() {
   let currentState: State<any> | null = null
-  let registerEffects = false
   const effects: Effect[][] = []
 
   function startEffectTracking(state: State<any>) {
     currentState = state
-    registerEffects = true
     effects.push([])
   }
 
   function stopEffectTracking() {
     currentState = null
-    registerEffects = false
     const effs = effects.pop()
     if (!effs) {
       throw new Error(
@@ -298,37 +290,19 @@ function createEffect() {
   }
 
   function effect(fn: Function) {
-    if (!registerEffects) return
     let dependencies = new Set()
 
     const run = () => {
       if (!currentState) return
-
-      currentState[START_DEPENDENCY_TRACKING]()
-      fn()
-      const nextDependencies = currentState[STOP_DEPENDENCY_TRACKING]()
-
-      for (const dep of dependencies) {
-        if (!nextDependencies.has(dep)) {
-          currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
-        }
-      }
-
-      for (const dep of nextDependencies) {
-        if (!dependencies.has(dep)) {
-          currentState[ADD_STATE_DEPENDENCY](dep, fn)
-        }
-      }
-
+      const [nextDependencies] = currentState[TRACKED_EXECUTE](fn)
+      currentState[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
       dependencies = nextDependencies
     }
 
     run()
 
     const unregister = () => {
-      for (const dep of dependencies) {
-        currentState[REMOVE_STATE_DEPENDENCY](dep, fn)
-      }
+      currentState[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
     }
 
     effects[effects.length - 1].push({
@@ -369,27 +343,15 @@ function createComponent<PropsT, StateT>(
       startEffectTracking(context.state)
     }
 
-    context.state[START_DEPENDENCY_TRACKING]()
-    const leafDescriptor = descriptor.component(nextProps)
-    const nextDependencies = context.state[STOP_DEPENDENCY_TRACKING]()
+    const [nextDependencies, leafDescriptor] = context.state[TRACKED_EXECUTE](
+      () => descriptor.component(nextProps)
+    )
+    context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
+    dependencies = nextDependencies
 
     if (effects === null) {
       effects = stopEffectTracking()
     }
-
-    for (const dep of dependencies) {
-      if (!nextDependencies.has(dep)) {
-        context.state[REMOVE_STATE_DEPENDENCY](dep, update)
-      }
-    }
-
-    for (const dep of nextDependencies) {
-      if (!dependencies.has(dep)) {
-        context.state[ADD_STATE_DEPENDENCY](dep, update)
-      }
-    }
-
-    dependencies = nextDependencies
 
     if (
       leafDescriptor.type === ElementDescriptorType.Component &&
@@ -424,9 +386,7 @@ function createComponent<PropsT, StateT>(
       }
     }
 
-    for (const dep of dependencies) {
-      context.state[REMOVE_STATE_DEPENDENCY](dep, update)
-    }
+    context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), update)
   }
 
   update()
@@ -495,27 +455,16 @@ function createHtmlTag<StateT>(
 
     let dependencies = new Set<string>()
 
-    const update = () => {
-      context.state[START_DEPENDENCY_TRACKING]()
-      handler((prop as () => T)())
-      const nextDependencies = context.state[STOP_DEPENDENCY_TRACKING]()
-
-      for (const dep of dependencies) {
-        if (!nextDependencies.has(dep)) {
-          context.state[REMOVE_STATE_DEPENDENCY](dep, update)
-        }
-      }
-
-      for (const dep of nextDependencies) {
-        if (!dependencies.has(dep)) {
-          context.state[ADD_STATE_DEPENDENCY](dep, update)
-        }
-      }
-
+    const run = () => {
+      const [nextDependencies, value] = context.state[TRACKED_EXECUTE](
+        prop as () => T
+      )
+      context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
       dependencies = nextDependencies
+      handler(value)
     }
 
-    update()
+    run()
 
     if (dependencies.size === 0) {
       return
@@ -523,9 +472,7 @@ function createHtmlTag<StateT>(
 
     lazyUpdates.push({
       unregister() {
-        for (const dep of dependencies) {
-          context.state[REMOVE_STATE_DEPENDENCY](dep, update)
-        }
+        context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
       },
     })
   }
