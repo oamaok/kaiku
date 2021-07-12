@@ -41,7 +41,7 @@ type LazyProperty<T> = T | (() => T)
 type HtmlTagProps = Partial<Record<HtmlAttribute, LazyProperty<string>>> &
   Partial<{
     style: Partial<Record<CssProperty, LazyProperty<string>>>
-    className: ClassNames
+    className: LazyProperty<ClassNames>
     onClick: Function
     onInput: Function
     checked: boolean
@@ -487,11 +487,8 @@ function createHtmlTag<StateT>(
   const element = document.createElement(descriptor.tag)
   context.parentNode.appendChild(element)
 
-  const lazy = (
-    prop: LazyProperty<string>,
-    handler: (value: string) => void
-  ) => {
-    if (typeof prop === 'string') {
+  const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
+    if (typeof prop !== 'function') {
       handler(prop)
       return
     }
@@ -500,7 +497,7 @@ function createHtmlTag<StateT>(
 
     const update = () => {
       context.state[START_DEPENDENCY_TRACKING]()
-      handler(prop())
+      handler((prop as () => T)())
       const nextDependencies = context.state[STOP_DEPENDENCY_TRACKING]()
 
       for (const dep of dependencies) {
@@ -539,10 +536,10 @@ function createHtmlTag<StateT>(
       ...Object.keys(prevProps),
     ]) as Set<keyof HtmlTagProps>
 
-    for (const lazyUpdate of lazyUpdates) {
-      lazyUpdate.unregister()
+    let update
+    while ((update = lazyUpdates.pop())) {
+      update.unregister()
     }
-    lazyUpdates = []
 
     for (const key of keys) {
       if (prevProps[key] === nextProps[key]) continue
@@ -587,10 +584,9 @@ function createHtmlTag<StateT>(
             continue
           }
           case 'className': {
-            element.setAttribute(
-              'class',
-              stringifyClassNames(nextProps[key] ?? '')
-            )
+            lazy(nextProps[key], (value) => {
+              element.setAttribute('class', stringifyClassNames(value ?? ''))
+            })
             continue
           }
         }
@@ -730,10 +726,10 @@ function createHtmlTag<StateT>(
   }
 
   function destroy() {
-    for (const lazyUpdate of lazyUpdates) {
-      lazyUpdate.unregister()
+    let update
+    while ((update = lazyUpdates.pop())) {
+      update.unregister()
     }
-    lazyUpdates = []
 
     context.parentNode.removeChild(element)
     for (const child of previousChildren) {
