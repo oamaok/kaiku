@@ -143,7 +143,10 @@ const createState = <StateT extends object>(
       callback()
     }
 
-    assert(!deferredUpdates.size, 'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.')
+    assert(
+      !deferredUpdates.size,
+      'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
+    )
   }
 
   const trackedExectute = <F extends (...args: any[]) => any>(

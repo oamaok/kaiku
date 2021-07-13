@@ -60,7 +60,7 @@ describe('kaiku', () => {
 
     const state = createState({
       a: 0,
-      b: 0
+      b: 0,
     })
 
     const App = () => {
