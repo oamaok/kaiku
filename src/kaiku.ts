@@ -26,23 +26,21 @@ type State<T> = T & {
 }
 
 type KaikuContext<StateT> = {
-  parentNode: HTMLElement
   state: State<StateT>
 }
 
-type Child = ElementDescriptor | string | number | boolean | null | undefined
+type RenderableChild = ElementDescriptor | string | number
+type Child = RenderableChild | boolean | null | undefined | Child[]
 type Children = Child[]
-
-type ComponentFunction<PropsT extends Object> = (
+type ComponentPropsBase = { key?: string; children?: Children[] }
+type ComponentFunction<PropsT extends ComponentPropsBase> = (
   props: PropsT
 ) => ElementDescriptor
-
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
-
 type LazyProperty<T> = T | (() => T)
-
 type HtmlTagProps = Partial<Record<HtmlAttribute, LazyProperty<string>>> &
   Partial<{
+    key: string
     style: Partial<Record<CssProperty, LazyProperty<string>>>
     className: LazyProperty<ClassNames>
     onClick: Function
@@ -61,9 +59,8 @@ const enum ElementType {
   TextNode,
 }
 
-type ElementDescriptor<PropsT = {}> =
-  | HtmlTagDescriptor
-  | ComponentDescriptor<PropsT>
+type ElementDescriptor<PropsT extends ComponentPropsBase = ComponentPropsBase> =
+  HtmlTagDescriptor | ComponentDescriptor<PropsT>
 
 type TagName = keyof HTMLElementTagNameMap
 
@@ -77,68 +74,57 @@ type HtmlTagDescriptor = {
 type HtmlTag = {
   type: ElementType.HtmlTag
   tag: TagName
+  getHtmlElement: () => HTMLElement
   update: (nextProps: HtmlTagProps, children: Children) => void
   destroy: () => void
 }
 
-type ComponentDescriptor<PropsT extends Object = {}> = {
+type ComponentDescriptor<
+  PropsT extends ComponentPropsBase = ComponentPropsBase
+> = {
   type: ElementDescriptorType.Component
   component: ComponentFunction<PropsT>
   props: PropsT
   children: Children
 }
 
-type Component<PropsT extends Object = {}> = {
+type Component<PropsT extends ComponentPropsBase = ComponentPropsBase> = {
   type: ElementType.Component
   component: ComponentFunction<PropsT>
+  getHtmlElement: () => HTMLElement
   update: (nextProps: PropsT) => void
   destroy: () => void
 }
 
-type Element<PropsT = {}> = HtmlTag | Component<PropsT>
+type Element<PropsT extends ComponentPropsBase = ComponentPropsBase> =
+  | HtmlTag
+  | Component<PropsT>
 
-const enum ActionType {
-  CreateText,
-  CreateElement,
-  UpdateText,
-  UpdateElement,
-}
-
-type Action =
-  | {
-      type: ActionType.CreateText
-      value: string | number
-    }
-  | {
-      type: ActionType.CreateElement
-      descriptor: ElementDescriptor<any>
-    }
-  | {
-      type: ActionType.UpdateText
-      node: Text
-      value: string | number
-    }
-  | {
-      type: ActionType.UpdateElement
-      element: Element<any>
-      descriptor: ElementDescriptor<any>
-    }
+type ChildElement = Element | { type: ElementType.TextNode; node: Text }
 
 type Effect = {
   run: () => void
   unregister: () => void
 }
 
-function createState<StateT extends Object>(
+const union = <T>(a: Set<T> | T[], b: Set<T> | T[]): Set<T> => {
+  const s = new Set(a)
+  for (const v of b) {
+    s.add(v)
+  }
+  return s
+}
+
+const createState = <StateT extends object>(
   initialState: StateT
-): State<StateT> {
+): State<StateT> => {
   const IS_WRAPPED = Symbol()
   let trackedDependencyStack: Set<string>[] = []
   let dependencyMap = new Map<string, Set<Function>>()
   let deferredUpdates = new Set<Function>()
   let deferredUpdateQueued = false
 
-  function deferredUpdate() {
+  const deferredUpdate = () => {
     const updates = deferredUpdates
     deferredUpdateQueued = false
     deferredUpdates = new Set()
@@ -151,21 +137,21 @@ function createState<StateT extends Object>(
     }
   }
 
-  function trackedExectute<F extends (...args: any) => any>(
+  const trackedExectute = <F extends (...args: any) => any>(
     fn: F,
     ...args: Parameters<F>
-  ): [Set<string>, ReturnType<F>] {
+  ): [Set<string>, ReturnType<F>] => {
     trackedDependencyStack.push(new Set())
     const result = fn(...args)
     const dependencies = trackedDependencyStack.pop()
     return [dependencies!, result]
   }
 
-  function updateDependencies(
+  const updateDependencies = (
     prevDependencies: Set<string>,
     nextDependencies: Set<string>,
     callback: Function
-  ) {
+  ) => {
     for (const depKey of nextDependencies) {
       if (!prevDependencies.has(depKey)) {
         const deps = dependencyMap.get(depKey)
@@ -191,7 +177,7 @@ function createState<StateT extends Object>(
   }
 
   let nextId = 0
-  function wrap<T extends object>(obj: T) {
+  const wrap = <T extends object>(obj: T) => {
     const id = ++nextId
 
     const isArray = Array.isArray(obj)
@@ -275,16 +261,16 @@ function createState<StateT extends Object>(
   return state as State<StateT>
 }
 
-function createEffect() {
-  let currentState: State<any> | null = null
+const createEffect = () => {
+  let currentState: State<object> | null = null
   const effects: Effect[][] = []
 
-  function startEffectTracking(state: State<any>) {
+  const startEffectTracking = (state: State<any>) => {
     currentState = state
     effects.push([])
   }
 
-  function stopEffectTracking() {
+  const stopEffectTracking = () => {
     currentState = null
     const effs = effects.pop()
     if (!effs) {
@@ -295,12 +281,11 @@ function createEffect() {
     return effs
   }
 
-  function effect(fn: Function) {
-    const state = currentState
-    let dependencies = new Set()
+  const effect = (fn: () => void) => {
+    const state: State<object> = currentState!
+    let dependencies = new Set<string>()
 
     const run = () => {
-      if (!state) return
       const [nextDependencies] = state[TRACKED_EXECUTE](fn)
       state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
       dependencies = nextDependencies
@@ -323,11 +308,11 @@ function createEffect() {
 
 const { startEffectTracking, stopEffectTracking, effect } = createEffect()
 
-function createComponentDescriptor<PropsT>(
+const createComponentDescriptor = <PropsT>(
   component: ComponentFunction<PropsT>,
   props: PropsT,
   children: Children
-): ComponentDescriptor<PropsT> {
+): ComponentDescriptor<PropsT> => {
   return {
     type: ElementDescriptorType.Component,
     component,
@@ -336,19 +321,24 @@ function createComponentDescriptor<PropsT>(
   }
 }
 
-function createComponent<PropsT, StateT>(
+const createComponent = <PropsT, StateT>(
   descriptor: ComponentDescriptor<PropsT>,
   context: KaikuContext<StateT>
-): Component<PropsT> {
+): Component<PropsT> => {
   let dependencies = new Set<string>()
   let prevLeaf: Element | null = null
   let prevProps: PropsT = descriptor.props
-  let effects: Effect[] | null = null
+  let effects: Effect[] = []
 
-  function update(nextProps: PropsT = prevProps) {
-    if (effects === null) {
-      startEffectTracking(context.state)
+  const update = (nextProps: PropsT = prevProps) => {
+    if (nextProps !== prevProps) {
     }
+
+    for (const effect of effects) {
+      effect.unregister()
+    }
+
+    startEffectTracking(context.state)
 
     const [nextDependencies, leafDescriptor] = context.state[TRACKED_EXECUTE](
       descriptor.component,
@@ -357,9 +347,7 @@ function createComponent<PropsT, StateT>(
     context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
     dependencies = nextDependencies
 
-    if (effects === null) {
-      effects = stopEffectTracking()
-    }
+    effects = stopEffectTracking()
 
     if (
       leafDescriptor.type === ElementDescriptorType.Component &&
@@ -383,15 +371,13 @@ function createComponent<PropsT, StateT>(
     prevProps = nextProps
   }
 
-  function destroy() {
+  const destroy = () => {
     if (prevLeaf) {
       prevLeaf.destroy()
     }
 
-    if (effects) {
-      for (const effect of effects) {
-        effect.unregister()
-      }
+    for (const effect of effects) {
+      effect.unregister()
     }
 
     context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), update)
@@ -399,19 +385,22 @@ function createComponent<PropsT, StateT>(
 
   update()
 
+  const getHtmlElement = () => prevLeaf!.getHtmlElement()
+
   return {
     type: ElementType.Component,
     component: descriptor.component,
+    getHtmlElement,
     update,
     destroy,
   }
 }
 
-function createHtmlTagDescriptor(
+const createHtmlTagDescriptor = (
   tag: TagName,
   props: HtmlTagProps,
   children: Children
-): HtmlTagDescriptor {
+): HtmlTagDescriptor => {
   return {
     type: ElementDescriptorType.HtmlTag,
     tag,
@@ -420,7 +409,7 @@ function createHtmlTagDescriptor(
   }
 }
 
-function stringifyClassNames(names: ClassNames): string {
+const stringifyClassNames = (names: ClassNames): string => {
   if (typeof names === 'string') {
     return names
   }
@@ -441,19 +430,125 @@ type LazyUpdate = {
   unregister: () => void
 }
 
-function createHtmlTag<StateT>(
+const LCS = <T>(a: T[], b: T[]): T[] => {
+  const C: number[] = Array(a.length * b.length).fill(0)
+
+  const ix = (i: number, j: number) => i * b.length + j
+
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      if (a[i] === b[j]) {
+        C[ix(i + 1, j + 1)] = C[ix(i, j)] + 1
+      } else {
+        C[ix(i + 1, j + 1)] = Math.max(C[ix(i + 1, j)], C[ix(i, j + 1)])
+      }
+    }
+  }
+
+  const res: T[] = []
+
+  let i = a.length
+  let j = b.length
+
+  while (i && j) {
+    if (a[i - 1] === b[j - 1]) {
+      res.push(a[i - 1])
+      i--
+      j--
+      continue
+    }
+
+    if (C[ix(i, j - 1)] > C[ix(i - 1, j)]) {
+      j--
+    } else {
+      i--
+    }
+  }
+
+  return res.reverse()
+}
+
+const flattenChildren = (
+  children: Children,
+  keyPrefix: string = '',
+  result: Map<string, RenderableChild> = new Map()
+): Map<string, RenderableChild> => {
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i]
+
+    if (
+      child === null ||
+      typeof child === 'boolean' ||
+      typeof child === 'undefined'
+    ) {
+      continue
+    }
+
+    if (Array.isArray(child)) {
+      flattenChildren(child, i + '.', result)
+      continue
+    }
+
+    if (typeof child === 'string' || typeof child === 'number') {
+      result.set(keyPrefix + i, child)
+      continue
+    }
+
+    result.set(keyPrefix + (child.props.key ? '_' + child.props.key : i), child)
+  }
+
+  return result
+}
+
+const reuseChildElement = (
+  prevChild: ChildElement,
+  nextChild: RenderableChild
+): boolean => {
+  if (typeof nextChild === 'string' || typeof nextChild === 'number') {
+    if (prevChild.type === ElementType.TextNode) {
+      const value = String(nextChild)
+      if (prevChild.node.data !== value) {
+        prevChild.node.data = value
+      }
+      return true
+    }
+    return false
+  }
+
+  if (
+    nextChild.type === ElementDescriptorType.HtmlTag &&
+    prevChild.type === ElementType.HtmlTag &&
+    nextChild.tag === prevChild.tag
+  ) {
+    prevChild.update(nextChild.props, nextChild.children)
+    return true
+  }
+
+  if (
+    nextChild.type === ElementDescriptorType.Component &&
+    prevChild.type === ElementType.Component &&
+    prevChild.component === prevChild.component
+  ) {
+    prevChild.update(nextChild.props)
+    return true
+  }
+
+  return false
+}
+
+const getNodeOfChildElement = (child: ChildElement): HTMLElement | Text =>
+  child.type === ElementType.TextNode ? child.node : child.getHtmlElement()
+
+const createHtmlTag = <StateT>(
   descriptor: HtmlTagDescriptor,
   context: KaikuContext<StateT>
-): HtmlTag {
-  let previousChildren: (
-    | { type: ElementType.TextNode; node: Text }
-    | Element
-  )[] = []
+): HtmlTag => {
+  let previousChildren: Map<string, ChildElement> = new Map()
+  let previousKeys: string[] = []
   let prevProps: HtmlTagProps = {}
   let lazyUpdates: LazyUpdate[] = []
 
   const element = document.createElement(descriptor.tag)
-  context.parentNode.appendChild(element)
 
   const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
     if (typeof prop !== 'function') {
@@ -485,14 +580,12 @@ function createHtmlTag<StateT>(
     })
   }
 
-  function update(nextProps: HtmlTagProps, nextChildren: Children) {
-    const keys = new Set([
-      ...Object.keys(nextProps),
-      ...Object.keys(prevProps),
-    ]) as Set<keyof HtmlTagProps>
+  const update = (nextProps: HtmlTagProps, children: Children) => {
+    const keys = union(Object.keys(nextProps), Object.keys(prevProps)) as Set<
+      keyof HtmlTagProps
+    >
 
-    let update
-    while ((update = lazyUpdates.pop())) {
+    for (let update; (update = lazyUpdates.pop()); update) {
       update.unregister()
     }
 
@@ -514,10 +607,10 @@ function createHtmlTag<StateT>(
       } else {
         switch (key) {
           case 'style': {
-            const properties = new Set([
-              ...Object.keys(nextProps.style || {}),
-              ...Object.keys(prevProps.style || {}),
-            ]) as Set<CssProperty>
+            const properties = union(
+              Object.keys(nextProps.style || {}),
+              Object.keys(prevProps.style || {})
+            ) as Set<CssProperty>
 
             for (const property of properties) {
               if (nextProps.style?.[property] !== prevProps.style?.[property]) {
@@ -558,158 +651,105 @@ function createHtmlTag<StateT>(
 
     prevProps = nextProps
 
-    const actions: Action[] = []
+    const flattenedChildren = flattenChildren(children)
+    const nextKeys = Array.from(flattenedChildren.keys())
+    const unchanged = LCS(previousKeys, nextKeys)
+    const preservedElements = new Set(unchanged)
 
-    for (const child of nextChildren.flat()) {
-      if (
-        child === null ||
-        typeof child === 'undefined' ||
-        typeof child === 'boolean'
-      ) {
-        continue
-      }
+    for (const key of unchanged) {
+      const nextChild = flattenedChildren.get(key)!
+      const prevChild = previousChildren.get(key)!
 
-      const existingPrevChildIdx = previousChildren.findIndex((prevChild) => {
-        if (typeof child === 'string' || typeof child === 'number') {
-          return prevChild.type === ElementType.TextNode
-        }
-
-        if (
-          child.type === ElementDescriptorType.HtmlTag &&
-          prevChild.type === ElementType.HtmlTag
-        ) {
-          return child.tag === prevChild.tag
-        }
-
-        if (
-          child.type === ElementDescriptorType.Component &&
-          prevChild.type === ElementType.Component
-        ) {
-          return child.component === prevChild.component
-        }
-
-        return false
-      })
-
-      if (existingPrevChildIdx === -1) {
-        if (typeof child === 'string' || typeof child === 'number') {
-          actions.push({
-            type: ActionType.CreateText,
-            value: child,
-          })
-        } else {
-          actions.push({
-            type: ActionType.CreateElement,
-            descriptor: child,
-          })
-        }
-        continue
-      }
-
-      const prevChild = previousChildren.splice(existingPrevChildIdx, 1)[0]
-
-      if (prevChild.type === ElementType.TextNode) {
-        actions.push({
-          type: ActionType.UpdateText,
-          node: prevChild.node,
-          value: child as string | number,
-        })
-        continue
-      }
-
-      actions.push({
-        type: ActionType.UpdateElement,
-        element: prevChild,
-        descriptor: child as ElementDescriptor,
-      })
-    }
-
-    for (const prevChild of previousChildren) {
-      if (prevChild.type === ElementType.TextNode) {
-        element.removeChild(prevChild.node)
-      } else {
-        prevChild.destroy()
+      if (!reuseChildElement(prevChild, nextChild)) {
+        preservedElements.delete(key)
       }
     }
 
-    previousChildren = []
+    for (const key of nextKeys) {
+      const prevChild = previousChildren.get(key)
+      const nextChild = flattenedChildren.get(key)!
 
-    for (const action of actions) {
-      switch (action.type) {
-        case ActionType.CreateText: {
-          const node = document.createTextNode(String(action.value))
-          element.appendChild(node)
-          previousChildren.push({
+      if (preservedElements.has(key)) continue
+
+      if (!prevChild || !reuseChildElement(prevChild, nextChild)) {
+        if (typeof nextChild === 'number' || typeof nextChild === 'string') {
+          const node = document.createTextNode(String(nextChild))
+          previousChildren.set(key, {
             type: ElementType.TextNode,
             node,
           })
           continue
         }
 
-        case ActionType.CreateElement: {
-          previousChildren.push(
-            createElement(action.descriptor, {
-              state: context.state,
-              parentNode: element,
-            })
-          )
-          continue
-        }
-
-        case ActionType.UpdateText: {
-          const text = String(action.value)
-          if (action.node.data !== text) {
-            action.node.data = text
-          }
-          previousChildren.push({
-            type: ElementType.TextNode,
-            node: action.node,
-          })
-          continue
-        }
-
-        case ActionType.UpdateElement: {
-          action.element.update(
-            action.descriptor.props,
-            action.descriptor.children
-          )
-          previousChildren.push(action.element)
-          continue
-        }
+        previousChildren.set(key, createElement(nextChild, context))
       }
     }
+
+    nextKeys.reverse()
+
+    for (let i = 0; i < nextKeys.length; i++) {
+      const key = nextKeys[i]
+      const prevKey = nextKeys[i - 1]
+
+      if (preservedElements.has(key)) continue
+
+      const node = getNodeOfChildElement(previousChildren.get(key)!)
+      if (!prevKey) {
+        element.appendChild(node)
+      } else {
+        const beforeNode = getNodeOfChildElement(previousChildren.get(prevKey)!)
+        element.insertBefore(node, beforeNode)
+      }
+    }
+
+    for (const [key, child] of previousChildren) {
+      if (!nextKeys.includes(key)) {
+        if (child.type === ElementType.TextNode) {
+          element.removeChild(child.node)
+        } else {
+          child.destroy()
+          element.removeChild(child.getHtmlElement())
+        }
+        previousChildren.delete(key)
+      }
+    }
+
+    previousKeys = nextKeys.reverse()
   }
 
-  function destroy() {
-    let update
-    while ((update = lazyUpdates.pop())) {
+  const destroy = () => {
+    for (let update; (update = lazyUpdates.pop()); update) {
       update.unregister()
     }
 
-    context.parentNode.removeChild(element)
-    for (const child of previousChildren) {
+    for (const [key, child] of previousChildren) {
       if (child.type === ElementType.TextNode) {
         element.removeChild(child.node)
       } else {
         child.destroy()
+        element.removeChild(child.getHtmlElement())
       }
+      previousChildren.delete(key)
     }
   }
+
+  const getHtmlElement = () => element
 
   update(descriptor.props, descriptor.children)
 
   return {
     type: ElementType.HtmlTag,
     tag: descriptor.tag,
+    getHtmlElement,
     destroy,
     update,
   }
 }
 
-function createElement<PropsT, StateT>(
+const createElement = <PropsT, StateT>(
   descriptor: ElementDescriptor<PropsT>,
   context: KaikuContext<StateT>
-): Element<PropsT> {
+): Element<PropsT> => {
   if (descriptor.type === ElementDescriptorType.Component) {
     return createComponent(descriptor, context)
   }
@@ -746,12 +786,13 @@ function h(tagOrComponent: any, props: any, ...children: any) {
   }
 }
 
-function render<PropsT, StateT>(
+const render = <PropsT, StateT>(
   rootDescriptor: ElementDescriptor<PropsT>,
   state: State<StateT>,
-  element: HTMLElement
-) {
-  createElement<PropsT, StateT>(rootDescriptor, { state, parentNode: element })
+  rootElement: HTMLElement
+) => {
+  const element = createElement<PropsT, StateT>(rootDescriptor, { state })
+  rootElement.appendChild(element.getHtmlElement())
 }
 
 export { h, render, createState, effect }
