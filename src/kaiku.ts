@@ -17,6 +17,7 @@ function assert(condition: any): asserts condition {
 }
 
 const TRACKED_EXECUTE = Symbol()
+const REMOVE_DEPENDENCIES = Symbol()
 const UPDATE_DEPENDENCIES = Symbol()
 
 type State<T> = T & {
@@ -24,6 +25,10 @@ type State<T> = T & {
     fn: F,
     ...args: Parameters<F>
   ) => [Set<string>, ReturnType<F>]
+  [REMOVE_DEPENDENCIES]: (
+    nextDependencies: Set<string>,
+    callback: Function
+  ) => void
   [UPDATE_DEPENDENCIES]: (
     prevDependencies: Set<string>,
     nextDependencies: Set<string>,
@@ -45,7 +50,6 @@ type ComponentFunction<PropsT extends ComponentPropsBase> = (
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
 type LazyProperty<T> = T | (() => T)
 
-
 type KaikuHtmlTagProps = {
   key: string
   style: Partial<Record<CssProperty, LazyProperty<string>>>
@@ -55,7 +59,9 @@ type KaikuHtmlTagProps = {
   checked: LazyProperty<boolean>
 }
 
-type HtmlTagProps = Partial<Record<Exclude<HtmlAttribute, keyof KaikuHtmlTagProps>, LazyProperty<string>>> &
+type HtmlTagProps = Partial<
+  Record<Exclude<HtmlAttribute, keyof KaikuHtmlTagProps>, LazyProperty<string>>
+> &
   Partial<KaikuHtmlTagProps>
 
 const enum ElementDescriptorType {
@@ -112,11 +118,6 @@ type Element<PropsT extends ComponentPropsBase = ComponentPropsBase> =
 
 type ChildElement = Element | { type: ElementType.TextNode; node: Text }
 
-type Effect = {
-  run: () => void
-  unregister: () => void
-}
-
 const union = <T>(a: Set<T> | T[], b: Set<T> | T[]): Set<T> => {
   const s = new Set(a)
   for (const v of b) {
@@ -156,6 +157,21 @@ const createState = <StateT extends object>(
     assert(dependencies)
 
     return [dependencies, result]
+  }
+
+  const removeDependencies = (
+    dependencies: Set<string>,
+    callback: Function
+  ) => {
+    for (const depKey of dependencies) {
+      const deps = dependencyMap.get(depKey)
+      if (deps) {
+        deps.delete(callback)
+        if (deps.size === 0) {
+          dependencyMap.delete(depKey)
+        }
+      }
+    }
   }
 
   const updateDependencies = (
@@ -198,6 +214,8 @@ const createState = <StateT extends object>(
         switch (key) {
           case TRACKED_EXECUTE:
             return trackedExectute
+          case REMOVE_DEPENDENCIES:
+            return removeDependencies
           case UPDATE_DEPENDENCIES:
             return updateDependencies
           case IS_WRAPPED:
@@ -273,49 +291,103 @@ const createState = <StateT extends object>(
 }
 
 const createEffect = () => {
+  let trackStack: boolean[] = []
+  let stateStack: State<object>[] = []
   let currentState: State<object> | null = null
-  const effects: Effect[][] = []
+  const effectStack: number[][] = []
 
   const startEffectTracking = (state: State<any>) => {
     currentState = state
-    effects.push([])
+    stateStack.push(state)
+    effectStack.push([])
+    trackStack.push(true)
   }
 
-  const stopEffectTracking = () => {
-    currentState = null
-    const effs = effects.pop()
-    assert(effs)
-    return effs
+  const stopEffectTracking = (): number[] => {
+    const state = stateStack.pop()
+    const effectIds = effectStack.pop()
+    trackStack.pop()
+    assert(state)
+    assert(effectIds)
+
+    currentState = state
+    return effectIds
   }
+
+  const pauseEffectTracking = () => {
+    trackStack.push(false)
+  }
+
+  const continueEffectTracking = () => {
+    trackStack.pop()
+  }
+
+  type Effect = {
+    state: State<object>
+    dependencies: Set<string>
+    callback: () => void
+  }
+
+  const effects: Map<number, Effect> = new Map()
+  let nextId = 0
 
   const effect = (fn: () => void) => {
+    if (!trackStack[trackStack.length - 1]) {
+      return
+    }
+
     assert(currentState)
 
+    const id = ++nextId
     const state: State<object> = currentState
-    let dependencies = new Set<string>()
 
     const run = () => {
+      const eff = effects.get(id)
+      assert(eff)
+
       const [nextDependencies] = state[TRACKED_EXECUTE](fn)
-      state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
-      dependencies = nextDependencies
+      state[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, run)
+      eff.dependencies = nextDependencies
     }
+
+    effects.set(id, {
+      state,
+      dependencies: new Set(),
+      callback: run,
+    })
+    effectStack[effectStack.length - 1].push(id)
 
     run()
-
-    const unregister = () => {
-      state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
-    }
-
-    effects[effects.length - 1].push({
-      run,
-      unregister,
-    })
   }
 
-  return { startEffectTracking, stopEffectTracking, effect }
+  const unregisterEffects = (effectIds: number[]) => {
+    for (let id; (id = effectIds.pop()); id) {
+      const eff = effects.get(id)
+      assert(eff)
+
+      eff.state[REMOVE_DEPENDENCIES](eff.dependencies, eff.callback)
+      effects.delete(id)
+    }
+  }
+
+  return {
+    startEffectTracking,
+    stopEffectTracking,
+    unregisterEffects,
+    effect,
+    pauseEffectTracking,
+    continueEffectTracking,
+  }
 }
 
-const { startEffectTracking, stopEffectTracking, effect } = createEffect()
+const {
+  startEffectTracking,
+  stopEffectTracking,
+  continueEffectTracking,
+  pauseEffectTracking,
+  unregisterEffects,
+  effect,
+} = createEffect()
 
 const createComponentDescriptor = <PropsT>(
   component: ComponentFunction<PropsT>,
@@ -337,17 +409,14 @@ const createComponent = <PropsT, StateT>(
   let dependencies = new Set<string>()
   let prevLeaf: Element | null = null
   let prevProps: PropsT = descriptor.props
-  let effects: Effect[] = []
+  let effects: number[] | null = null
 
   const update = (nextProps: PropsT = prevProps) => {
-    if (nextProps !== prevProps) {
+    if (!effects) {
+      startEffectTracking(context.state)
+    } else {
+      pauseEffectTracking()
     }
-
-    for (const effect of effects) {
-      effect.unregister()
-    }
-
-    startEffectTracking(context.state)
 
     const [nextDependencies, leafDescriptor] = context.state[TRACKED_EXECUTE](
       descriptor.component,
@@ -356,7 +425,11 @@ const createComponent = <PropsT, StateT>(
     context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
     dependencies = nextDependencies
 
-    effects = stopEffectTracking()
+    if (!effects) {
+      effects = stopEffectTracking()
+    } else {
+      continueEffectTracking()
+    }
 
     if (
       leafDescriptor.type === ElementDescriptorType.Component &&
@@ -385,10 +458,9 @@ const createComponent = <PropsT, StateT>(
       prevLeaf.destroy()
     }
 
-    for (const effect of effects) {
-      effect.unregister()
+    if (effects) {
+      unregisterEffects(effects)
     }
-
     context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), update)
   }
 
@@ -579,7 +651,7 @@ const createHtmlTag = <StateT>(
     }
 
     lazyUpdates.push(() => {
-        context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
+      context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
     })
   }
 
