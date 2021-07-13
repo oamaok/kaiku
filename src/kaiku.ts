@@ -130,7 +130,7 @@ const createState = <StateT extends object>(
   initialState: StateT
 ): State<StateT> => {
   const IS_WRAPPED = Symbol()
-  let trackedDependencyStack: Set<string>[] = []
+  const trackedDependencyStack: Set<string>[] = []
   let dependencyMap = new Map<string, Set<Function>>()
   let deferredUpdates = new Set<Function>()
   let deferredUpdateQueued = false
@@ -146,7 +146,7 @@ const createState = <StateT extends object>(
     assert(!deferredUpdates.size)
   }
 
-  const trackedExectute = <F extends (...args: any) => any>(
+  const trackedExectute = <F extends (...args: any[]) => any>(
     fn: F,
     ...args: Parameters<F>
   ): [Set<string>, ReturnType<F>] => {
@@ -185,6 +185,8 @@ const createState = <StateT extends object>(
         if (deps) {
           deps.add(callback)
         } else {
+          // TODO: We could probably re-use the `Set`s discarded by the  cleanup.
+          // Push them onto a stack and pop them here.
           dependencyMap.set(depKey, new Set([callback]))
         }
       }
@@ -738,7 +740,7 @@ const createHtmlTag = <StateT>(
       const nextChild = flattenedChildren.get(key)
       const prevChild = previousChildren.get(key)
 
-      assert(nextChild)
+      assert(typeof nextChild !== 'undefined')
       assert(prevChild)
 
       const wasReused = reuseChildElement(prevChild, nextChild)
@@ -754,7 +756,7 @@ const createHtmlTag = <StateT>(
       const nextChild = flattenedChildren.get(key)
       const prevChild = previousChildren.get(key)
 
-      assert(nextChild)
+      assert(typeof nextChild !== 'undefined')
 
       const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
 
