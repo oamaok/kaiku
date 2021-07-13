@@ -427,32 +427,23 @@ const createComponent = <PropsT, StateT>(
     context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
     dependencies = nextDependencies
 
+    prevProps = nextProps
+
     if (!effects) {
       effects = stopEffectTracking()
     } else {
       continueEffectTracking()
     }
 
-    if (
-      leafDescriptor.type === ElementDescriptorType.Component &&
-      prevLeaf?.type === ElementType.Component &&
-      leafDescriptor.component === prevLeaf.component
-    ) {
-      prevLeaf.update(leafDescriptor.props)
-    } else if (
-      leafDescriptor.type === ElementDescriptorType.HtmlTag &&
-      prevLeaf?.type === ElementType.HtmlTag &&
-      leafDescriptor.tag === prevLeaf.tag
-    ) {
-      prevLeaf.update(leafDescriptor.props, leafDescriptor.children)
-    } else if (prevLeaf) {
+    const wasReused = prevLeaf && reuseChildElement(prevLeaf, leafDescriptor)
+
+    if (wasReused) return
+
+    if (prevLeaf) {
       prevLeaf.destroy()
-      prevLeaf = createElement(leafDescriptor, context)
-    } else {
-      prevLeaf = createElement(leafDescriptor, context)
     }
 
-    prevProps = nextProps
+    prevLeaf = createElement(leafDescriptor, context)
   }
 
   const destroy = () => {
