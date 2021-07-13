@@ -10,6 +10,12 @@
 import { CssProperty } from './css-properties'
 import { HtmlAttribute } from './html-attributes'
 
+function assert(condition: any): asserts condition {
+  if (!condition) {
+    throw new Error('assert')
+  }
+}
+
 const TRACKED_EXECUTE = Symbol()
 const UPDATE_DEPENDENCIES = Symbol()
 
@@ -74,7 +80,7 @@ type HtmlTagDescriptor = {
 type HtmlTag = {
   type: ElementType.HtmlTag
   tag: TagName
-  getHtmlElement: () => HTMLElement
+  el: () => HTMLElement
   update: (nextProps: HtmlTagProps, children: Children) => void
   destroy: () => void
 }
@@ -91,7 +97,7 @@ type ComponentDescriptor<
 type Component<PropsT extends ComponentPropsBase = ComponentPropsBase> = {
   type: ElementType.Component
   component: ComponentFunction<PropsT>
-  getHtmlElement: () => HTMLElement
+  el: () => HTMLElement
   update: (nextProps: PropsT) => void
   destroy: () => void
 }
@@ -132,9 +138,7 @@ const createState = <StateT extends object>(
       callback()
     }
 
-    if (deferredUpdates.size) {
-      throw new Error('Side effects in render')
-    }
+    assert(!deferredUpdates.size)
   }
 
   const trackedExectute = <F extends (...args: any) => any>(
@@ -273,11 +277,7 @@ const createEffect = () => {
   const stopEffectTracking = () => {
     currentState = null
     const effs = effects.pop()
-    if (!effs) {
-      throw new Error(
-        'stopEffectTracking() called without a matching start call'
-      )
-    }
+    assert(effs)
     return effs
   }
 
@@ -385,12 +385,12 @@ const createComponent = <PropsT, StateT>(
 
   update()
 
-  const getHtmlElement = () => prevLeaf!.getHtmlElement()
+  const el = () => prevLeaf!.el()
 
   return {
     type: ElementType.Component,
     component: descriptor.component,
-    getHtmlElement,
+    el,
     update,
     destroy,
   }
@@ -430,7 +430,7 @@ type LazyUpdate = {
   unregister: () => void
 }
 
-const LCS = <T>(a: T[], b: T[]): T[] => {
+const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
   const C: number[] = Array(a.length * b.length).fill(0)
 
   const ix = (i: number, j: number) => i * b.length + j
@@ -537,7 +537,7 @@ const reuseChildElement = (
 }
 
 const getNodeOfChildElement = (child: ChildElement): HTMLElement | Text =>
-  child.type === ElementType.TextNode ? child.node : child.getHtmlElement()
+  child.type === ElementType.TextNode ? child.node : child.el()
 
 const createHtmlTag = <StateT>(
   descriptor: HtmlTagDescriptor,
@@ -653,14 +653,17 @@ const createHtmlTag = <StateT>(
 
     const flattenedChildren = flattenChildren(children)
     const nextKeys = Array.from(flattenedChildren.keys())
-    const unchanged = LCS(previousKeys, nextKeys)
-    const preservedElements = new Set(unchanged)
+    const preservedElements = new Set(
+      longestCommonSubsequence(previousKeys, nextKeys)
+    )
 
-    for (const key of unchanged) {
+    for (const key of preservedElements) {
       const nextChild = flattenedChildren.get(key)!
       const prevChild = previousChildren.get(key)!
 
-      if (!reuseChildElement(prevChild, nextChild)) {
+      const wasReused = reuseChildElement(prevChild, nextChild)
+
+      if (!wasReused) {
         preservedElements.delete(key)
       }
     }
@@ -671,7 +674,9 @@ const createHtmlTag = <StateT>(
 
       if (preservedElements.has(key)) continue
 
-      if (!prevChild || !reuseChildElement(prevChild, nextChild)) {
+      const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
+
+      if (!wasReused) {
         if (typeof nextChild === 'number' || typeof nextChild === 'string') {
           const node = document.createTextNode(String(nextChild))
           previousChildren.set(key, {
@@ -685,11 +690,9 @@ const createHtmlTag = <StateT>(
       }
     }
 
-    nextKeys.reverse()
-
-    for (let i = 0; i < nextKeys.length; i++) {
+    for (let i = nextKeys.length - 1; i >= 0; i--) {
       const key = nextKeys[i]
-      const prevKey = nextKeys[i - 1]
+      const prevKey = nextKeys[i + 1]
 
       if (preservedElements.has(key)) continue
 
@@ -708,13 +711,13 @@ const createHtmlTag = <StateT>(
           element.removeChild(child.node)
         } else {
           child.destroy()
-          element.removeChild(child.getHtmlElement())
+          element.removeChild(child.el())
         }
         previousChildren.delete(key)
       }
     }
 
-    previousKeys = nextKeys.reverse()
+    previousKeys = nextKeys
   }
 
   const destroy = () => {
@@ -727,20 +730,20 @@ const createHtmlTag = <StateT>(
         element.removeChild(child.node)
       } else {
         child.destroy()
-        element.removeChild(child.getHtmlElement())
+        element.removeChild(child.el())
       }
       previousChildren.delete(key)
     }
   }
 
-  const getHtmlElement = () => element
+  const el = () => element
 
   update(descriptor.props, descriptor.children)
 
   return {
     type: ElementType.HtmlTag,
     tag: descriptor.tag,
-    getHtmlElement,
+    el,
     destroy,
     update,
   }
@@ -767,6 +770,10 @@ function h<PropsT>(
   ...children: Children
 ): ComponentDescriptor<PropsT>
 function h(tagOrComponent: any, props: any, ...children: any) {
+  assert(
+    typeof tagOrComponent === 'string' || typeof tagOrComponent === 'function'
+  )
+
   switch (typeof tagOrComponent) {
     case 'function': {
       return createComponentDescriptor(tagOrComponent, props ?? {}, children)
@@ -779,10 +786,6 @@ function h(tagOrComponent: any, props: any, ...children: any) {
         children
       )
     }
-
-    default: {
-      throw new Error('Invalid constructor')
-    }
   }
 }
 
@@ -792,7 +795,7 @@ const render = <PropsT, StateT>(
   rootElement: HTMLElement
 ) => {
   const element = createElement<PropsT, StateT>(rootDescriptor, { state })
-  rootElement.appendChild(element.getHtmlElement())
+  rootElement.appendChild(element.el())
 }
 
 export { h, render, createState, effect }
