@@ -44,15 +44,19 @@ type ComponentFunction<PropsT extends ComponentPropsBase> = (
 ) => ElementDescriptor
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
 type LazyProperty<T> = T | (() => T)
-type HtmlTagProps = Partial<Record<HtmlAttribute, LazyProperty<string>>> &
-  Partial<{
-    key: string
-    style: Partial<Record<CssProperty, LazyProperty<string>>>
-    className: LazyProperty<ClassNames>
-    onClick: Function
-    onInput: Function
-    checked: boolean
-  }>
+
+
+type KaikuHtmlTagProps = {
+  key: string
+  style: Partial<Record<CssProperty, LazyProperty<string>>>
+  className: LazyProperty<ClassNames>
+  onClick: Function
+  onInput: Function
+  checked: LazyProperty<boolean>
+}
+
+type HtmlTagProps = Partial<Record<Exclude<HtmlAttribute, keyof KaikuHtmlTagProps>, LazyProperty<string>>> &
+  Partial<KaikuHtmlTagProps>
 
 const enum ElementDescriptorType {
   HtmlTag,
@@ -148,7 +152,10 @@ const createState = <StateT extends object>(
     trackedDependencyStack.push(new Set())
     const result = fn(...args)
     const dependencies = trackedDependencyStack.pop()
-    return [dependencies!, result]
+
+    assert(dependencies)
+
+    return [dependencies, result]
   }
 
   const updateDependencies = (
@@ -282,7 +289,9 @@ const createEffect = () => {
   }
 
   const effect = (fn: () => void) => {
-    const state: State<object> = currentState!
+    assert(currentState)
+
+    const state: State<object> = currentState
     let dependencies = new Set<string>()
 
     const run = () => {
@@ -426,10 +435,6 @@ const stringifyClassNames = (names: ClassNames): string => {
   return className
 }
 
-type LazyUpdate = {
-  unregister: () => void
-}
-
 const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
   const C: number[] = Array(a.length * b.length).fill(0)
 
@@ -546,7 +551,7 @@ const createHtmlTag = <StateT>(
   let previousChildren: Map<string, ChildElement> = new Map()
   let previousKeys: string[] = []
   let prevProps: HtmlTagProps = {}
-  let lazyUpdates: LazyUpdate[] = []
+  let lazyUpdates: (() => void)[] = []
 
   const element = document.createElement(descriptor.tag)
 
@@ -573,10 +578,8 @@ const createHtmlTag = <StateT>(
       return
     }
 
-    lazyUpdates.push({
-      unregister() {
+    lazyUpdates.push(() => {
         context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
-      },
     })
   }
 
@@ -585,8 +588,8 @@ const createHtmlTag = <StateT>(
       keyof HtmlTagProps
     >
 
-    for (let update; (update = lazyUpdates.pop()); update) {
-      update.unregister()
+    for (let unregister; (unregister = lazyUpdates.pop()); unregister) {
+      unregister()
     }
 
     for (const key of keys) {
@@ -622,7 +625,9 @@ const createHtmlTag = <StateT>(
             continue
           }
           case 'checked': {
-            ;(element as HTMLInputElement).checked = !!nextProps[key]
+            lazy(nextProps.checked, (value) => {
+              ;(element as HTMLInputElement).checked = value as boolean
+            })
             continue
           }
           case 'value': {
@@ -658,8 +663,11 @@ const createHtmlTag = <StateT>(
     )
 
     for (const key of preservedElements) {
-      const nextChild = flattenedChildren.get(key)!
-      const prevChild = previousChildren.get(key)!
+      const nextChild = flattenedChildren.get(key)
+      const prevChild = previousChildren.get(key)
+
+      assert(nextChild)
+      assert(prevChild)
 
       const wasReused = reuseChildElement(prevChild, nextChild)
 
@@ -669,10 +677,12 @@ const createHtmlTag = <StateT>(
     }
 
     for (const key of nextKeys) {
-      const prevChild = previousChildren.get(key)
-      const nextChild = flattenedChildren.get(key)!
-
       if (preservedElements.has(key)) continue
+
+      const nextChild = flattenedChildren.get(key)
+      const prevChild = previousChildren.get(key)
+
+      assert(nextChild)
 
       const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
 
@@ -721,8 +731,8 @@ const createHtmlTag = <StateT>(
   }
 
   const destroy = () => {
-    for (let update; (update = lazyUpdates.pop()); update) {
-      update.unregister()
+    for (let unregister; (unregister = lazyUpdates.pop()); unregister) {
+      unregister()
     }
 
     for (const [key, child] of previousChildren) {
