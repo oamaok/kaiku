@@ -1,4 +1,4 @@
-import { h, render, createState } from '../dist/kaiku'
+import { h, render, createState, effect } from '../dist/kaiku'
 
 const dummyState = createState({})
 
@@ -53,5 +53,59 @@ describe('kaiku', () => {
     await nextTick()
 
     expect(displayElem.innerHTML).toBe('The counter is at 1')
+  })
+
+  it('should fire effect hooks properly', async () => {
+    const effectCallCounter = jest.fn()
+
+    const state = createState({
+      a: 0,
+      b: 0
+    })
+
+    const App = () => {
+      effect(() => {
+        effectCallCounter()
+
+        if (state.a === 2) {
+          if (state.b === 2) {
+            // do stuff
+          }
+        }
+      })
+      return <div />
+    }
+
+    render(<App />, state, rootNode)
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+
+    // `state.b` shouldn't yet be a dependency, so the hook must not be called
+    state.b++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+
+    // `state.a` will be set to 2
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(3)
+
+    // `state.b` should now be a dependency
+    state.b++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(4)
+
+    // `state.a` will be set to 3
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(5)
+
+    // `state.b` should once again not be a dependency
+    state.b++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
 })

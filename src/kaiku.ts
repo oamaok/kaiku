@@ -10,9 +10,9 @@
 import { CssProperty } from './css-properties'
 import { HtmlAttribute } from './html-attributes'
 
-function assert(condition: any): asserts condition {
+function assert(condition: any, message?: string): asserts condition {
   if (!condition) {
-    throw new Error('assert')
+    throw new Error(message ?? 'assert')
   }
 }
 
@@ -143,7 +143,7 @@ const createState = <StateT extends object>(
       callback()
     }
 
-    assert(!deferredUpdates.size)
+    assert(!deferredUpdates.size, 'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.')
   }
 
   const trackedExectute = <F extends (...args: any[]) => any>(
@@ -295,11 +295,9 @@ const createState = <StateT extends object>(
 const createEffect = () => {
   let trackStack: boolean[] = []
   let stateStack: State<object>[] = []
-  let currentState: State<object> | null = null
   const effectStack: number[][] = []
 
   const startEffectTracking = (state: State<any>) => {
-    currentState = state
     stateStack.push(state)
     effectStack.push([])
     trackStack.push(true)
@@ -312,7 +310,6 @@ const createEffect = () => {
     assert(state)
     assert(effectIds)
 
-    currentState = state
     return effectIds
   }
 
@@ -338,10 +335,10 @@ const createEffect = () => {
       return
     }
 
-    assert(currentState)
-
     const id = ++nextId
-    const state: State<object> = currentState
+    const state = stateStack[stateStack.length - 1] as State<object> | undefined
+
+    assert(state)
 
     const run = () => {
       const eff = effects.get(id)
