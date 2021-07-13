@@ -425,8 +425,8 @@ const createComponent = <PropsT, StateT>(
       nextProps
     )
     context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
-    dependencies = nextDependencies
 
+    dependencies = nextDependencies
     prevProps = nextProps
 
     if (!effects) {
@@ -436,7 +436,6 @@ const createComponent = <PropsT, StateT>(
     }
 
     const wasReused = prevLeaf && reuseChildElement(prevLeaf, leafDescriptor)
-
     if (wasReused) return
 
     if (prevLeaf) {
@@ -454,7 +453,8 @@ const createComponent = <PropsT, StateT>(
     if (effects) {
       unregisterEffects(effects)
     }
-    context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), update)
+
+    context.state[REMOVE_DEPENDENCIES](dependencies, update)
   }
 
   update()
@@ -642,9 +642,9 @@ const createHtmlTag = <StateT>(
     if (dependencies.size === 0) {
       return
     }
-
+    // TODO: Change this to use system similar to effects
     lazyUpdates.push(() => {
-      context.state[UPDATE_DEPENDENCIES](dependencies, new Set(), run)
+      context.state[REMOVE_DEPENDENCIES](dependencies, run)
     })
   }
 
