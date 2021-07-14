@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: node v14.15.4
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.15.4'
+      - name: Install packages and run tests
+        run: |
+          yarn install
+          yarn test
