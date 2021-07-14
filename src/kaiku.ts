@@ -119,12 +119,63 @@ type Element<PropsT extends ComponentPropsBase = ComponentPropsBase> =
 type ChildElement = Element | { type: ElementType.TextNode; node: Text }
 
 const union = <T>(a: Set<T> | T[], b: Set<T> | T[]): Set<T> => {
-  const s = new Set(a)
+  const s = setPool.allocate(a)
   for (const v of b) {
     s.add(v)
   }
   return s
 }
+
+const createSetPool = () => {
+  const pool: Set<any>[] = []
+  const restorationSet = new Set()
+
+  const illegalInvokation = () => {
+    throw new Error('Method of a pooled Set() illegally invoked')
+  }
+
+  const allocate = <T>(values?: T[] | Set<T>): Set<T> => {
+    const set = pool.pop() ?? new Set()
+
+    if (__DEBUG__) {
+      set.add = restorationSet.add
+      set.has = restorationSet.has
+      set.keys = restorationSet.keys
+      set.clear = restorationSet.clear
+      set.values = restorationSet.values
+      set.delete = restorationSet.delete
+      set.forEach = restorationSet.forEach
+    }
+
+    if (values) {
+      for (const value of values) {
+        set.add(value)
+      }
+    }
+
+    return set
+  }
+
+  const free = (set: Set<any>) => {
+    assert(set.size === 0)
+
+    if (__DEBUG__) {
+      set.add = illegalInvokation
+      set.has = illegalInvokation
+      set.keys = illegalInvokation
+      set.clear = illegalInvokation
+      set.values = illegalInvokation
+      set.delete = illegalInvokation
+      set.forEach = illegalInvokation
+    }
+
+    pool.push(set)
+  }
+
+  return { allocate, free }
+}
+
+const setPool = createSetPool()
 
 const createState = <StateT extends object>(
   initialState: StateT
@@ -132,16 +183,19 @@ const createState = <StateT extends object>(
   const IS_WRAPPED = Symbol()
   const trackedDependencyStack: Set<string>[] = []
   let dependencyMap = new Map<string, Set<Function>>()
-  let deferredUpdates = new Set<Function>()
+  let deferredUpdates = setPool.allocate<Function>()
   let deferredUpdateQueued = false
 
   const deferredUpdate = () => {
     const updates = deferredUpdates
     deferredUpdateQueued = false
-    deferredUpdates = new Set()
+    deferredUpdates = setPool.allocate()
     for (const callback of updates) {
       callback()
     }
+
+    updates.clear()
+    setPool.free(updates)
 
     assert(
       !deferredUpdates.size,
@@ -153,7 +207,7 @@ const createState = <StateT extends object>(
     fn: F,
     ...args: Parameters<F>
   ): [Set<string>, ReturnType<F>] => {
-    trackedDependencyStack.push(new Set())
+    trackedDependencyStack.push(setPool.allocate())
     const result = fn(...args)
     const dependencies = trackedDependencyStack.pop()
 
@@ -188,9 +242,7 @@ const createState = <StateT extends object>(
         if (deps) {
           deps.add(callback)
         } else {
-          // TODO: We could probably re-use the `Set`s discarded by the  cleanup.
-          // Push them onto a stack and pop them here.
-          dependencyMap.set(depKey, new Set([callback]))
+          dependencyMap.set(depKey, setPool.allocate([callback]))
         }
       }
     }
@@ -201,6 +253,7 @@ const createState = <StateT extends object>(
         if (deps) {
           deps.delete(callback)
           if (deps.size === 0) {
+            setPool.free(deps)
             dependencyMap.delete(depKey)
           }
         }
@@ -349,12 +402,16 @@ const createEffect = () => {
 
       const [nextDependencies] = state[TRACKED_EXECUTE](fn)
       state[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, run)
+
+      eff.dependencies.clear()
+      setPool.free(eff.dependencies)
+
       eff.dependencies = nextDependencies
     }
 
     effects.set(id, {
       state,
-      dependencies: new Set(),
+      dependencies: setPool.allocate(),
       callback: run,
     })
     effectStack[effectStack.length - 1].push(id)
@@ -368,6 +425,8 @@ const createEffect = () => {
       assert(eff)
 
       eff.state[REMOVE_DEPENDENCIES](eff.dependencies, eff.callback)
+      eff.dependencies.clear()
+      setPool.free(eff.dependencies)
       effects.delete(id)
     }
   }
@@ -408,7 +467,7 @@ const createComponent = <PropsT, StateT>(
   descriptor: ComponentDescriptor<PropsT>,
   context: KaikuContext<StateT>
 ): Component<PropsT> => {
-  let dependencies = new Set<string>()
+  let dependencies = setPool.allocate<string>()
   let prevLeaf: Element | null = null
   let prevProps: PropsT = descriptor.props
   let effects: number[] | null = null
@@ -626,13 +685,15 @@ const createHtmlTag = <StateT>(
       return
     }
 
-    let dependencies = new Set<string>()
+    let dependencies = setPool.allocate<string>()
 
     const run = () => {
       const [nextDependencies, value] = context.state[TRACKED_EXECUTE](
         prop as () => T
       )
       context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
+      dependencies.clear()
+      setPool.free(dependencies)
       dependencies = nextDependencies
       handler(value)
     }
@@ -640,6 +701,7 @@ const createHtmlTag = <StateT>(
     run()
 
     if (dependencies.size === 0) {
+      setPool.free(dependencies)
       return
     }
     // TODO: Change this to use system similar to effects
@@ -724,7 +786,7 @@ const createHtmlTag = <StateT>(
 
     const flattenedChildren = flattenChildren(children)
     const nextKeys = Array.from(flattenedChildren.keys())
-    const preservedElements = new Set(
+    const preservedElements = setPool.allocate(
       longestCommonSubsequence(previousKeys, nextKeys)
     )
 
@@ -793,6 +855,8 @@ const createHtmlTag = <StateT>(
       }
     }
 
+    preservedElements.clear()
+    setPool.free(preservedElements)
     previousKeys = nextKeys
   }
 

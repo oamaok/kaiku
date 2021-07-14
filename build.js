@@ -40,5 +40,8 @@ if (process.env.NODE_ENV === 'production') {
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
   outfile: 'dist/kaiku.js',
+  define: {
+    __DEBUG__: process.env.NODE_ENV !== 'production',
+  },
   minify: process.env.NODE_ENV === 'production',
 })
