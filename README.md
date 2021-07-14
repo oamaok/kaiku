@@ -1,4 +1,4 @@
-# Kaiku
+# Kaiku ![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
 
 Lightweight JSX-based UI framework with boilerplate-free state managament.
 
