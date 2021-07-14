@@ -659,6 +659,7 @@ const createHtmlTag = <StateT>(
 
     for (const key of keys) {
       if (prevProps[key] === nextProps[key]) continue
+      if (key === 'key') continue
 
       const isListener = key.startsWith('on')
 
