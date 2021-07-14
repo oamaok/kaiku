@@ -55,6 +55,42 @@ describe('kaiku', () => {
     expect(displayElem.innerHTML).toBe('The counter is at 1')
   })
 
+  it('should only update dependant attributes without re-render', async () => {
+    const propUpdateCounter = jest.fn()
+    const reRenderCounter = jest.fn()
+
+    const state = createState({ name: 'foo' })
+
+    const Component = () => {
+      reRenderCounter()
+
+      return (
+        <div
+          id="test"
+          name={() => {
+            propUpdateCounter()
+            return state.name
+          }}
+        />
+      )
+    }
+
+    render(<Component />, state, rootNode)
+
+    const element = document.querySelector('#test')
+
+    expect(propUpdateCounter).toHaveBeenCalledTimes(1)
+    expect(reRenderCounter).toHaveBeenCalledTimes(1)
+    expect(element.getAttribute('name')).toBe('foo')
+
+    state.name = 'bar'
+    await nextTick()
+
+    expect(propUpdateCounter).toHaveBeenCalledTimes(2)
+    expect(reRenderCounter).toHaveBeenCalledTimes(1)
+    expect(element.getAttribute('name')).toBe('bar')
+  })
+
   it('should fire effect hooks properly', async () => {
     const effectCallCounter = jest.fn()
 
