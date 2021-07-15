@@ -4,8 +4,7 @@
   "description": "Lightweight UI framework",
   "license": "MIT",
   "author": "Teemu Pääkkönen",
-  "main": "dist/kaiku.js",
-  "types": "dist/kaiku.d.ts",
+  "main": "dist/kaiku.min.js",
   "files": [
     "dist/*"
   ],
