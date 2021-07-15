@@ -4,6 +4,10 @@
   "description": "Lightweight UI framework",
   "license": "MIT",
   "author": "Teemu Pääkkönen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oamaok/kaiku.git"
+  },
   "main": "dist/kaiku.min.js",
   "files": [
     "dist/*"
