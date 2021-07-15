@@ -36,59 +36,61 @@ const TaskItem = ({ parentTask, index, task }) => {
   const canMoveDown = index !== parentTask.subTasks.length - 1
 
   return (
-    <div className={['todo-item', { done: task.done }]}>
-      {canMoveUp && (
+    <div className={() => ['todo-item', { done: task.done }]}>
+      <div className="item-controls">
+        {canMoveUp && (
+          <button
+            onClick={() => {
+              const tmp = parentTask.subTasks[index - 1]
+              parentTask.subTasks[index - 1] = task
+              parentTask.subTasks[index] = tmp
+            }}
+          >
+            ^
+          </button>
+        )}
+        {canMoveDown && (
+          <button
+            onClick={() => {
+              const tmp = parentTask.subTasks[index + 1]
+              parentTask.subTasks[index + 1] = task
+              parentTask.subTasks[index] = tmp
+            }}
+          >
+            v
+          </button>
+        )}
+        <input
+          value={() => task.name}
+          onInput={(evt) => {
+            task.name = evt.target.value.toUpperCase()
+          }}
+        />
+        Done:
+        <input
+          type="checkbox"
+          checked={() => task.done}
+          onClick={() => {
+            task.done = !task.done
+          }}
+        />
         <button
           onClick={() => {
-            const tmp = parentTask.subTasks[i - 1]
-            parentTask.subTasks[i - 1] = task
-            parentTask.subTasks[i] = tmp
+            parentTask.subTasks = parentTask.subTasks.filter((t) => t !== task)
           }}
         >
-          ^
+          X
         </button>
-      )}
-      {canMoveDown && (
         <button
           onClick={() => {
-            const tmp = parentTask.subTasks[i + 1]
-            parentTask.subTasks[i + 1] = task
-            parentTask.subTasks[i] = tmp
+            addNewSubTask(task)
           }}
         >
-          v
+          New sub task
         </button>
-      )}
-      <input
-        value={task.name}
-        onInput={(evt) => {
-          task.name = evt.target.value.toUpperCase()
-        }}
-      />
-      <input
-        type="checkbox"
-        checked={() => task.done}
-        onClick={() => {
-          task.done = !task.done
-        }}
-      />
-      <button
-        onClick={() => {
-          parentTask.subTasks = parentTask.subTasks.filter((t) => t !== task)
-        }}
-      >
-        remove
-      </button>
-      <button
-        onClick={() => {
-          addNewSubTask(task)
-        }}
-      >
-        New sub task
-      </button>
+      </div>
       {!!task.subTasks.length && (
         <div className="sub-tasks">
-          Sub tasks
           <TaskList parentTask={task} />
         </div>
       )}
