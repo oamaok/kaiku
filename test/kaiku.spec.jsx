@@ -1,22 +1,32 @@
-import { h, render, createState, effect } from '../dist/kaiku.dev.js'
+const getKaiku = () => {
+  switch (process.env.KAIKU_VERSION) {
+    case 'minified':
+      return require('../dist/kaiku.min.js')
+    case 'development':
+      return require('../dist/kaiku.dev.js')
+    default:
+      throw new Error('Invalid KAIKU_VERSION')
+  }
+}
 
-const dummyState = createState({})
+const { h, render, createState, effect } = getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
 
 let rootNode
-
 beforeEach(() => {
   if (rootNode) document.body.removeChild(rootNode)
   rootNode = document.createElement('div')
   document.body.appendChild(rootNode)
 })
 
-describe('kaiku', () => {
+describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
   it('should render a span to body', async () => {
+    const state = createState({})
+
     const App = () => <span id="test">Hello world!</span>
 
-    render(<App />, dummyState, rootNode)
+    render(<App />, state, rootNode)
 
     const span = document.getElementById('test')
 

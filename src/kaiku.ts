@@ -135,7 +135,10 @@ import { HtmlAttribute } from './html-attributes'
   const createSetPool = () => {
     const SET_POOL_MAX_SIZE = 10000
     const pool: Set<any>[] = []
-    const restorationSet = new Set()
+    let restorationSet: Set<any>
+    if (__DEBUG__) {
+      restorationSet = new Set()
+    }
 
     const illegalInvokation = () => {
       throw new Error('Method of a pooled Set() illegally invoked')
