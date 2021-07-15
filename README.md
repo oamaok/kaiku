@@ -2,105 +2,60 @@
 
 Lightweight JSX-based UI framework with boilerplate-free state managament.
 
+# Getting started
+
+Kaiku is packaged to be easily used in both browser and as a module, no build tools required:
+
+```html
+<script src="https://unpkg.com/kaiku"></script>
+<script>
+  const { h, render, createState } = kaiku
+  const state = createState({ greeting: 'Hello world' })
+
+  const App = () => h('span', null, state.greeting)
+
+  render(h(App), state, document.body)
+</script>
+```
+
+Or, just install the package using your favorite package manager:
+
+```shell
+# With NPM
+npm i -s kaiku
+
+# With yarn
+yarn add kaiku
+```
+
 # Example
 
-```tsx
+```js
 import { h, render, createState } from 'kaiku'
 
-const state = createState({
-  tasks: {
-    subTasks: [],
-  },
-})
+const state = createState({ counter: 0 })
 
-const TaskList = ({ parentTask }) => {
-  return (
-    <div className="todo-list">
-      {parentTask.subTasks.map((task) => (
-        <TaskItem parentTask={parentTask} task={task} />
-      ))}
-    </div>
-  )
-}
+const Counter = () => (
+  <div>
+    <span>Counter: {state.counter}</span>
+    <button
+      onClick={() => {
+        state.counter++
+      }}
+    >
+      Increment
+    </button>
+    <button
+      onClick={() => {
+        state.counter--
+      }}
+    >
+      Decrement
+    </button>
+  </div>
+)
 
-const TaskItem = ({ parentTask, task }) => {
-  return (
-    <div className={['todo-item', { done: task.done }]}>
-      <input
-        value={task.name}
-        onInput={(evt) => {
-          task.name = evt.target.value.toUpperCase()
-        }}
-      />
-      <input
-        type="checkbox"
-        checked={task.done}
-        onClick={() => {
-          task.done = !task.done
-        }}
-      />
-      <button
-        onClick={() => {
-          parentTask.subTasks = parentTask.subTasks.filter((t) => t !== task)
-        }}
-      >
-        remove
-      </button>
-      <button
-        onClick={() => {
-          task.subTasks.push({
-            name: 'New sub task',
-            done: false,
-            subTasks: [],
-          })
-        }}
-      >
-        New sub task
-      </button>
-      {!!task.subTasks.length && (
-        <div className="sub-tasks">
-          Sub tasks
-          <TaskList parentTask={task} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-const Summary = () => {
-  return <pre>{JSON.stringify(state.tasks, null, 2)}</pre>
-}
-
-const TodoApp = () => {
-  return (
-    <div className="todo-app">
-      <button
-        onClick={() => {
-          state.tasks.subTasks.push({
-            name: 'New task',
-            done: false,
-            subTasks: [],
-          })
-        }}
-      >
-        New Task
-      </button>
-      <button
-        onClick={() => {
-          state.tasks.subTasks = state.tasks.subTasks.sort(
-            (a, b) => a.done - b.done
-          )
-        }}
-      >
-        Sort based on done
-      </button>
-      <TaskList parentTask={state.tasks} />
-      <Summary />
-    </div>
-  )
-}
-
-render(<TodoApp />, state, document.body)
+render(<Counter />, state, document.body)
 ```
 
 # License
