@@ -487,6 +487,26 @@ import { HtmlAttribute } from './html-attributes'
     let effects: number[] | null = null
 
     const update = (nextProps: PropsT = prevProps) => {
+      if (nextProps !== prevProps) {
+        const properties = union(
+          Object.keys(nextProps),
+          Object.keys(prevProps)
+        ) as Set<keyof PropsT>
+
+        let unchanged = true
+        for (const property of properties) {
+          if (nextProps[property] !== prevProps[property]) {
+            unchanged = false
+            break
+          }
+        }
+
+        if (unchanged) {
+          prevProps = nextProps
+          return
+        }
+      }
+
       if (!effects) {
         startEffectTracking(context.state)
       } else {

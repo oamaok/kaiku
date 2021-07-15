@@ -154,4 +154,64 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
+
+  it('should handle updates in an array efficiently', async () => {
+    const listRenderCounter = jest.fn()
+    const itemRenderCounter = jest.fn()
+
+    const state = createState({
+      list: Array(10)
+        .fill()
+        .map((_, i) => ({
+          key: i,
+          name: 'Hello, I am item number ' + i,
+          condition: i < 5,
+        })),
+    })
+
+    const Item = ({ item }) => {
+      itemRenderCounter(item.name, item.condition)
+
+      return <div>{item.name}</div>
+    }
+
+    const List = () => {
+      listRenderCounter()
+
+      return (
+        <div>
+          {state.list
+            .filter((item) => item.condition)
+            .map((item) => (
+              <Item item={item} />
+            ))}
+        </div>
+      )
+    }
+
+    render(<List />, state, rootNode)
+
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+
+    // Since this item hasn't been rendered yet, nothing should re-render
+    state.list[9].name = 'My name just changed'
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+
+    // This item has been rendered, but the `.name` field is only used
+    // in the <Item /> component. The <List /> component should not re-render.
+    state.list[2].name = "I'm changing my name aswell!"
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(6)
+
+    // Changing the condition of a previously unrendered item should trigger a
+    // render in the <List /> component as well.
+    state.list[5].condition = true
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(2)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+  })
 })
