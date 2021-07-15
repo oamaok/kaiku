@@ -1,47 +1,30 @@
+const fs = require('fs')
 const esbuild = require('esbuild')
+const terser = require('terser')
 
-if (process.env.NODE_ENV === 'production') {
-  const ts = require('typescript')
-  const tsconfig = require('./tsconfig.json')
-
-  const lib = tsconfig.compilerOptions.lib.map((lib) => `lib.${lib}.d.ts`)
-  const program = ts.createProgram(['./src/kaiku.ts'], {
-    ...tsconfig.compilerOptions,
-    lib,
-  })
-
-  const result = program.emit()
-
-  ts.getPreEmitDiagnostics(program)
-    .concat(result.diagnostics)
-    .forEach((diagnostic) => {
-      if (diagnostic.file) {
-        const { line, character } = ts.getLineAndCharacterOfPosition(
-          diagnostic.file,
-          diagnostic.start
-        )
-        const message = ts.flattenDiagnosticMessageText(
-          diagnostic.messageText,
-          '\n'
-        )
-        console.log(
-          `${diagnostic.file.fileName} (${line + 1},${
-            character + 1
-          }): ${message}`
-        )
-      } else {
-        console.log(
-          ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
-        )
-      }
-    })
-}
+const isProduction = process.env.NODE_ENV === 'production'
 
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
   outfile: 'dist/kaiku.js',
   define: {
-    __DEBUG__: process.env.NODE_ENV !== 'production',
+    __DEBUG__: !isProduction,
   },
-  minify: process.env.NODE_ENV === 'production',
 })
+
+if (isProduction) {
+  terser
+    .minify(fs.readFileSync('dist/kaiku.js').toString(), {
+      compress: {
+        passes: 3,
+      },
+      mangle: {
+        properties: {
+          reserved: ['h', 'render', 'createState', 'effect'],
+        },
+      },
+    })
+    .then((minified) => {
+      fs.writeFileSync('dist/kaiku.js', minified.code)
+    })
+}
