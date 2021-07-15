@@ -1,6 +1,8 @@
 # Kaiku ![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
 
-Lightweight JSX-based UI framework with boilerplate-free state managament.
+From Finnish _kaiku_ (_/ˈkɑi̯ku/_), meaning _echo_.
+
+A lightweight JSX-based UI framework with a freely mutable, boilerplate-free global state management.
 
 ## Getting started
 
