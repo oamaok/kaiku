@@ -10,10 +10,8 @@
     "dist/*"
   ],
   "scripts": {
-    "test:dev": "yarn build:dev && jest",
     "test": "yarn build && jest",
-    "build:dev": "NODE_ENV=development rm -rf dist/ && node build.js",
-    "build": "rm -rf dist/ && NODE_ENV=production node build.js",
+    "build": "rm -rf dist/ && node build.js",
     "prettier": "prettier --write ."
   },
   "dependencies": {},

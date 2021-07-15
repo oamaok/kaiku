@@ -1,4 +1,4 @@
-import { h, render, createState, effect } from '../dist/kaiku'
+import { h, render, createState, effect } from '../dist/kaiku.dev.js'
 
 const dummyState = createState({})
 
