@@ -20,7 +20,7 @@ beforeEach(() => {
   document.body.appendChild(rootNode)
 })
 
-describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
+describe('kaiku', () => {
   it('should render a span to body', async () => {
     const state = createState({})
 
@@ -58,11 +58,13 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
     const buttonElem = document.querySelector('button')
 
     expect(displayElem.innerHTML).toBe('The counter is at 0')
+    expect(rootNode.innerHTML).toMatchSnapshot()
 
     buttonElem.click()
     await nextTick()
 
     expect(displayElem.innerHTML).toBe('The counter is at 1')
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
   it('should only update dependant attributes without re-render', async () => {
@@ -183,7 +185,7 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
           {state.list
             .filter((item) => item.condition)
             .map((item) => (
-              <Item item={item} />
+              <Item key={item.key} item={item} />
             ))}
         </div>
       )
@@ -193,12 +195,14 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(rootNode.innerHTML).toMatchSnapshot()
 
     // Since this item hasn't been rendered yet, nothing should re-render
     state.list[9].name = 'My name just changed'
     await nextTick()
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(rootNode.innerHTML).toMatchSnapshot()
 
     // This item has been rendered, but the `.name` field is only used
     // in the <Item /> component. The <List /> component should not re-render.
@@ -206,6 +210,7 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
     await nextTick()
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(6)
+    expect(rootNode.innerHTML).toMatchSnapshot()
 
     // Changing the condition of a previously unrendered item should trigger a
     // render in the <List /> component as well.
@@ -213,5 +218,15 @@ describe(`kaiku (KAIKU_VERSION=${process.env.KAIKU_VERSION})`, () => {
     await nextTick()
     expect(listRenderCounter).toHaveBeenCalledTimes(2)
     expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    // Should only render the two items which changed places
+    const item = state.list[0]
+    state.list[0] = state.list[4]
+    state.list[4] = item
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(3)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(8)
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })
