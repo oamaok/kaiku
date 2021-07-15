@@ -30,6 +30,8 @@ yarn add kaiku
 
 ## Example
 
+For more in-depth examples, see the [`examples/`](examples) directory in the repository root.
+
 ```js
 import { h, render, createState } from 'kaiku'
 
