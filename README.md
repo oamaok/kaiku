@@ -2,7 +2,7 @@
 
 Lightweight JSX-based UI framework with boilerplate-free state managament.
 
-# Getting started
+## Getting started
 
 Kaiku is packaged to be easily used in both browser and as a module, no build tools required:
 
@@ -28,7 +28,7 @@ npm i -s kaiku
 yarn add kaiku
 ```
 
-# Example
+## Example
 
 ```js
 import { h, render, createState } from 'kaiku'
@@ -58,7 +58,7 @@ const Counter = () => (
 render(<Counter />, state, document.body)
 ```
 
-# License
+## License
 
 ```
 Copyright (c) 2021 Teemu Pääkkönen
