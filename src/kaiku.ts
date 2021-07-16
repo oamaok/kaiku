@@ -658,7 +658,7 @@ import { HtmlAttribute } from './html-attributes'
       }
 
       result.set(
-        keyPrefix + (child.props.key ? '_' + child.props.key : i),
+        keyPrefix + (typeof child.props.key !== 'undefined' ? '_' + child.props.key : i),
         child
       )
     }

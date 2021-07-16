@@ -172,7 +172,7 @@ describe('kaiku', () => {
     })
 
     const Item = ({ item }) => {
-      itemRenderCounter(item.name, item.condition)
+      itemRenderCounter(item)
 
       return <div>{item.name}</div>
     }
@@ -220,13 +220,13 @@ describe('kaiku', () => {
     expect(itemRenderCounter).toHaveBeenCalledTimes(7)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
-    // Should only render the two items which changed places
+    // Should re-render the list component after re-order
     const item = state.list[0]
     state.list[0] = state.list[4]
     state.list[4] = item
     await nextTick()
     expect(listRenderCounter).toHaveBeenCalledTimes(3)
-    expect(itemRenderCounter).toHaveBeenCalledTimes(8)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })
