@@ -173,13 +173,11 @@ describe('kaiku', () => {
 
     const Item = ({ item }) => {
       itemRenderCounter(item)
-
       return <div>{item.name}</div>
     }
 
     const List = () => {
       listRenderCounter()
-
       return (
         <div>
           {state.list
@@ -227,6 +225,81 @@ describe('kaiku', () => {
     await nextTick()
     expect(listRenderCounter).toHaveBeenCalledTimes(3)
     expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    // Removing list items should not trigger re-renders in the items
+    state.list[0].condition = false
+    state.list[1].condition = false
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(4)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should update lazy props efficiently', async () => {
+    const listRenderCounter = jest.fn()
+    const itemRenderCounter = jest.fn()
+    const propUpdateCounter = jest.fn()
+
+    const state = createState({
+      list: Array(10)
+        .fill()
+        .map((_, i) => ({
+          key: i,
+          borderThicc: 0,
+          condition: i < 5,
+        })),
+    })
+
+    const Item = ({ item }) => {
+      itemRenderCounter(item)
+      return (
+        <div
+          style={{
+            borderWidth: () => {
+              propUpdateCounter()
+              return item.borderThicc + 'px'
+            },
+          }}
+        />
+      )
+    }
+
+    const List = () => {
+      listRenderCounter()
+      return (
+        <div id="list">
+          {state.list
+            .filter((item) => item.condition)
+            .map((item) => (
+              <Item key={item.key} item={item} />
+            ))}
+        </div>
+      )
+    }
+
+    render(<List />, state, rootNode)
+
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(propUpdateCounter).toHaveBeenCalledTimes(5)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    // Updating the border thickness of a single element should
+    // not trigger any re-renders, since the property is lazy
+    state.list[0].borderThicc = 10
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(propUpdateCounter).toHaveBeenCalledTimes(6)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    // Removing the item should not trigger the prop to update
+    state.list[0].condition = false
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(2)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(propUpdateCounter).toHaveBeenCalledTimes(6)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })

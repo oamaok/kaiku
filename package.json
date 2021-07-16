@@ -14,8 +14,8 @@
   ],
   "scripts": {
     "test": "yarn build && yarn test:minified && yarn test:dev",
-    "test:minified": "KAIKU_VERSION=minified jest",
-    "test:dev": "KAIKU_VERSION=development jest",
+    "test:minified": "KAIKU_VERSION=minified jest --coverage",
+    "test:dev": "KAIKU_VERSION=development jest --coverage",
     "build": "rm -rf dist/ && node build.js",
     "lint": "eslint src/*",
     "prettier": "prettier --write ."

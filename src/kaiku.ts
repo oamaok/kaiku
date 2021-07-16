@@ -144,7 +144,9 @@ import { HtmlAttribute } from './html-attributes'
       throw new Error('Method of a pooled Set() illegally invoked')
     }
 
-    const allocate = <T>(values?: T[] | Set<T>): Set<T> => {
+    const allocate = <T>(
+      values?: T[] | Set<T> | IterableIterator<T>
+    ): Set<T> => {
       const set = pool.pop() ?? new Set()
 
       if (__DEBUG__) {
@@ -825,9 +827,11 @@ import { HtmlAttribute } from './html-attributes'
       prevProps = nextProps
 
       const flattenedChildren = flattenChildren(children)
-      const nextKeys = Array.from(flattenedChildren.keys())
+      const nextKeysIterator = flattenedChildren.keys()
+      const nextKeysArr = Array.from(nextKeysIterator)
+      const nextKeys = setPool.allocate(nextKeysArr)
       const preservedElements = setPool.allocate(
-        longestCommonSubsequence(previousKeys, nextKeys)
+        longestCommonSubsequence(previousKeys, nextKeysArr)
       )
 
       for (const key of preservedElements) {
@@ -868,9 +872,9 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      for (let i = nextKeys.length - 1; i >= 0; i--) {
-        const key = nextKeys[i]
-        const prevKey = nextKeys[i + 1]
+      for (let i = nextKeysArr.length - 1; i >= 0; i--) {
+        const key = nextKeysArr[i]
+        const prevKey = nextKeysArr[i + 1]
 
         if (preservedElements.has(key)) continue
 
@@ -888,7 +892,7 @@ import { HtmlAttribute } from './html-attributes'
       }
 
       for (const [key, child] of previousChildren) {
-        if (!nextKeys.includes(key)) {
+        if (!nextKeys.has(key)) {
           if (child.type === ElementType.TextNode) {
             element.removeChild(child.node)
           } else {
@@ -898,10 +902,11 @@ import { HtmlAttribute } from './html-attributes'
           previousChildren.delete(key)
         }
       }
-
+      nextKeys.clear()
       preservedElements.clear()
+      setPool.free(nextKeys)
       setPool.free(preservedElements)
-      previousKeys = nextKeys
+      previousKeys = nextKeysArr
     }
 
     const destroy = () => {
@@ -909,7 +914,7 @@ import { HtmlAttribute } from './html-attributes'
         unregister()
       }
 
-      for (const [key, child] of previousChildren) {
+      for (const child of previousChildren.values()) {
         if (child.type === ElementType.TextNode) {
           element.removeChild(child.node)
         } else {
