@@ -20,4 +20,5 @@ jobs:
       - name: Install packages and run tests
         run: |
           yarn install
+          yarn lint
           yarn test

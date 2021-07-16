@@ -11,7 +11,7 @@ import { CssProperty } from './css-properties'
 import { HtmlAttribute } from './html-attributes'
 ;(() => {
   function __assert(condition: any, message?: string): asserts condition {
-    if (!condition) {
+    if (!Boolean(condition)) {
       throw new Error(message ?? 'assert')
     }
   }
@@ -324,7 +324,7 @@ import { HtmlAttribute } from './html-attributes'
 
           const dependencyKey = id + '.' + key
 
-          if (typeof value === 'object' && !value[IS_WRAPPED]) {
+          if (typeof value === 'object' && value[IS_WRAPPED] !== true) {
             target[key] = wrap(value)
           } else {
             target[key] = value
@@ -434,7 +434,7 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const unregisterEffects = (effectIds: number[]) => {
-      for (let id; (id = effectIds.pop()); id) {
+      for (let id; (id = effectIds.pop()) !== undefined; ) {
         const eff = effects.get(id)
         assert(eff)
 
@@ -658,7 +658,8 @@ import { HtmlAttribute } from './html-attributes'
       }
 
       result.set(
-        keyPrefix + (typeof child.props.key !== 'undefined' ? '_' + child.props.key : i),
+        keyPrefix +
+          (typeof child.props.key !== 'undefined' ? '_' + child.props.key : i),
         child
       )
     }
@@ -752,7 +753,7 @@ import { HtmlAttribute } from './html-attributes'
         keyof HtmlTagProps
       >
 
-      for (let unregister; (unregister = lazyUpdates.pop()); unregister) {
+      for (let unregister; (unregister = lazyUpdates.pop()); ) {
         unregister()
       }
 
@@ -902,7 +903,7 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const destroy = () => {
-      for (let unregister; (unregister = lazyUpdates.pop()); unregister) {
+      for (let unregister; (unregister = lazyUpdates.pop()); ) {
         unregister()
       }
 
