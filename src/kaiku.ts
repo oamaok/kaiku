@@ -237,6 +237,7 @@ import { HtmlAttribute } from './html-attributes'
         if (deps) {
           deps.delete(callback)
           if (deps.size === 0) {
+            setPool.free(deps)
             dependencyMap.delete(depKey)
           }
         }
@@ -539,15 +540,14 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const destroy = () => {
-      if (prevLeaf) {
-        prevLeaf.destroy()
-      }
+      assert(prevLeaf)
+      assert(effects)
 
-      if (effects) {
-        unregisterEffects(effects)
-      }
-
+      prevLeaf.destroy()
+      unregisterEffects(effects)
       context.state[REMOVE_DEPENDENCIES](dependencies, update)
+      dependencies.clear()
+      setPool.free(dependencies)
     }
 
     update()
@@ -874,13 +874,15 @@ import { HtmlAttribute } from './html-attributes'
 
         if (preservedElements.has(key)) continue
 
-        const node = getNodeOfChildElement(previousChildren.get(key)!)
+        const child = previousChildren.get(key)
+        assert(child)
+        const node = getNodeOfChildElement(child)
         if (!prevKey) {
           element.appendChild(node)
         } else {
-          const beforeNode = getNodeOfChildElement(
-            previousChildren.get(prevKey)!
-          )
+          const beforeChild = previousChildren.get(prevKey)
+          assert(beforeChild)
+          const beforeNode = getNodeOfChildElement(beforeChild)
           element.insertBefore(node, beforeNode)
         }
       }
@@ -914,8 +916,9 @@ import { HtmlAttribute } from './html-attributes'
           child.destroy()
           element.removeChild(child.el())
         }
-        previousChildren.delete(key)
       }
+
+      previousChildren.clear()
     }
 
     const el = () => element
