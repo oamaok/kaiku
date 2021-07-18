@@ -10,7 +10,10 @@
 import { CssProperty } from './css-properties'
 import { HtmlAttribute } from './html-attributes'
 ;(() => {
-  function __assert(condition: any, message?: string): asserts condition {
+  function __assert(
+    condition: boolean | undefined | object | null,
+    message?: string
+  ): asserts condition {
     if (!Boolean(condition)) {
       throw new Error(message ?? 'assert')
     }
@@ -40,6 +43,9 @@ import { HtmlAttribute } from './html-attributes'
 
   type KaikuContext<StateT> = {
     state: State<StateT>
+    updateStack: (() => void)[]
+    mountStack: (() => void)[]
+    currentlyExecutingUpdates: boolean
   }
 
   type RenderableChild = ElementDescriptor | string | number
@@ -485,27 +491,28 @@ import { HtmlAttribute } from './html-attributes'
     context: KaikuContext<StateT>
   ): Component<PropsT> => {
     let dependencies = setPool.allocate<string>()
-    let prevLeaf: Element | null = null
-    let prevProps: PropsT = descriptor.props
+    let currentLeaf: Element | null = null
+    let currentProps: PropsT = descriptor.props
+    let nextLeafDescriptor: ElementDescriptor | null = null
     let effects: number[] | null = null
 
-    const update = (nextProps: PropsT = prevProps) => {
-      if (nextProps !== prevProps) {
+    const update = (nextProps: PropsT = currentProps) => {
+      if (nextProps !== currentProps) {
         const properties = union(
           Object.keys(nextProps),
-          Object.keys(prevProps)
+          Object.keys(currentProps)
         ) as Set<keyof PropsT>
 
         let unchanged = true
         for (const property of properties) {
-          if (nextProps[property] !== prevProps[property]) {
+          if (nextProps[property] !== currentProps[property]) {
             unchanged = false
             break
           }
         }
 
         if (unchanged) {
-          prevProps = nextProps
+          currentProps = nextProps
           return
         }
       }
@@ -520,10 +527,11 @@ import { HtmlAttribute } from './html-attributes'
         descriptor.component,
         nextProps
       )
+      nextLeafDescriptor = leafDescriptor
       context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
 
       dependencies = nextDependencies
-      prevProps = nextProps
+      currentProps = nextProps
 
       if (!effects) {
         effects = stopEffectTracking()
@@ -531,21 +539,41 @@ import { HtmlAttribute } from './html-attributes'
         continueEffectTracking()
       }
 
-      const wasReused = prevLeaf && reuseChildElement(prevLeaf, leafDescriptor)
+      context.updateStack.push(updateLeaf)
+
+      if (!context.currentlyExecutingUpdates) {
+        context.currentlyExecutingUpdates = true
+
+        let fn
+        while ((fn = context.updateStack.pop())) {
+          fn()
+        }
+        while ((fn = context.mountStack.pop())) {
+          fn()
+        }
+
+        context.currentlyExecutingUpdates = false
+      }
+    }
+
+    const updateLeaf = () => {
+      assert(nextLeafDescriptor)
+      const wasReused =
+        currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
       if (wasReused) return
 
-      if (prevLeaf) {
-        prevLeaf.destroy()
+      if (currentLeaf) {
+        currentLeaf.destroy()
       }
 
-      prevLeaf = createElement(leafDescriptor, context)
+      currentLeaf = createElement(nextLeafDescriptor, context)
     }
 
     const destroy = () => {
-      assert(prevLeaf)
+      assert(currentLeaf)
       assert(effects)
 
-      prevLeaf.destroy()
+      currentLeaf.destroy()
       unregisterEffects(effects)
       context.state[REMOVE_DEPENDENCIES](dependencies, update)
       dependencies.clear()
@@ -554,7 +582,7 @@ import { HtmlAttribute } from './html-attributes'
 
     update()
 
-    const el = () => prevLeaf!.el()
+    const el = () => currentLeaf!.el()
 
     return {
       type: ElementType.Component,
@@ -712,12 +740,18 @@ import { HtmlAttribute } from './html-attributes'
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
   ): HtmlTag => {
-    let previousChildren: Map<string, ChildElement> = new Map()
-    let previousKeys: string[] = []
-    let prevProps: HtmlTagProps = {}
-    let lazyUpdates: (() => void)[] = []
-
     const element = document.createElement(descriptor.tag)
+
+    let currentChildren: Map<string, ChildElement> = new Map()
+    let currentKeys: string[] = []
+    let currentProps: HtmlTagProps = {}
+
+    let nextChildren: Children | null = null
+    let nextKeys: Set<string> | null = null
+    let nextKeysArr: string[] | null = null
+    let preservedElements: Set<string> | null = null
+
+    let lazyUpdates: (() => void)[] = []
 
     const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
       if (typeof prop !== 'function') {
@@ -751,16 +785,17 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const update = (nextProps: HtmlTagProps, children: Children) => {
-      const keys = union(Object.keys(nextProps), Object.keys(prevProps)) as Set<
-        keyof HtmlTagProps
-      >
+      const keys = union(
+        Object.keys(nextProps),
+        Object.keys(currentProps)
+      ) as Set<keyof HtmlTagProps>
 
       for (let unregister; (unregister = lazyUpdates.pop()); ) {
         unregister()
       }
 
       for (const key of keys) {
-        if (prevProps[key] === nextProps[key]) continue
+        if (currentProps[key] === nextProps[key]) continue
         if (key === 'key') continue
 
         const isListener = key.startsWith('on')
@@ -768,8 +803,11 @@ import { HtmlAttribute } from './html-attributes'
         if (isListener) {
           const eventName = key.substr(2).toLowerCase()
 
-          if (key in prevProps) {
-            element.removeEventListener(eventName as any, prevProps[key] as any)
+          if (key in currentProps) {
+            element.removeEventListener(
+              eventName as any,
+              currentProps[key] as any
+            )
           }
 
           if (key in nextProps) {
@@ -780,12 +818,12 @@ import { HtmlAttribute } from './html-attributes'
             case 'style': {
               const properties = union(
                 Object.keys(nextProps.style || {}),
-                Object.keys(prevProps.style || {})
+                Object.keys(currentProps.style || {})
               ) as Set<CssProperty>
 
               for (const property of properties) {
                 if (
-                  nextProps.style?.[property] !== prevProps.style?.[property]
+                  nextProps.style?.[property] !== currentProps.style?.[property]
                 ) {
                   lazy(nextProps.style?.[property] ?? '', (value) => {
                     element.style[property as any] = value
@@ -824,19 +862,27 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      prevProps = nextProps
+      currentProps = nextProps
+      nextChildren = children
 
-      const flattenedChildren = flattenChildren(children)
+      context.updateStack.push(updateChildren)
+      context.mountStack.push(mountChildren)
+    }
+
+    const updateChildren = () => {
+      assert(nextChildren)
+
+      const flattenedChildren = flattenChildren(nextChildren)
       const nextKeysIterator = flattenedChildren.keys()
-      const nextKeysArr = Array.from(nextKeysIterator)
-      const nextKeys = setPool.allocate(nextKeysArr)
-      const preservedElements = setPool.allocate(
-        longestCommonSubsequence(previousKeys, nextKeysArr)
+      nextKeysArr = Array.from(nextKeysIterator)
+      nextKeys = setPool.allocate(nextKeysArr)
+      preservedElements = setPool.allocate(
+        longestCommonSubsequence(currentKeys, nextKeysArr)
       )
 
       for (const key of preservedElements) {
         const nextChild = flattenedChildren.get(key)
-        const prevChild = previousChildren.get(key)
+        const prevChild = currentChildren.get(key)
 
         assert(typeof nextChild !== 'undefined')
         assert(prevChild)
@@ -852,7 +898,7 @@ import { HtmlAttribute } from './html-attributes'
         if (preservedElements.has(key)) continue
 
         const nextChild = flattenedChildren.get(key)
-        const prevChild = previousChildren.get(key)
+        const prevChild = currentChildren.get(key)
 
         assert(typeof nextChild !== 'undefined')
 
@@ -861,14 +907,32 @@ import { HtmlAttribute } from './html-attributes'
         if (!wasReused) {
           if (typeof nextChild === 'number' || typeof nextChild === 'string') {
             const node = document.createTextNode(String(nextChild))
-            previousChildren.set(key, {
+            currentChildren.set(key, {
               type: ElementType.TextNode,
               node,
             })
             continue
           }
 
-          previousChildren.set(key, createElement(nextChild, context))
+          currentChildren.set(key, createElement(nextChild, context))
+        }
+      }
+    }
+
+    const mountChildren = () => {
+      assert(nextKeys)
+      assert(nextKeysArr)
+      assert(preservedElements)
+
+      for (const [key, child] of currentChildren) {
+        if (!nextKeys.has(key)) {
+          if (child.type === ElementType.TextNode) {
+            element.removeChild(child.node)
+          } else {
+            child.destroy()
+            element.removeChild(child.el())
+          }
+          currentChildren.delete(key)
         }
       }
 
@@ -878,35 +942,24 @@ import { HtmlAttribute } from './html-attributes'
 
         if (preservedElements.has(key)) continue
 
-        const child = previousChildren.get(key)
+        const child = currentChildren.get(key)
         assert(child)
         const node = getNodeOfChildElement(child)
         if (!prevKey) {
           element.appendChild(node)
         } else {
-          const beforeChild = previousChildren.get(prevKey)
+          const beforeChild = currentChildren.get(prevKey)
           assert(beforeChild)
           const beforeNode = getNodeOfChildElement(beforeChild)
           element.insertBefore(node, beforeNode)
         }
       }
 
-      for (const [key, child] of previousChildren) {
-        if (!nextKeys.has(key)) {
-          if (child.type === ElementType.TextNode) {
-            element.removeChild(child.node)
-          } else {
-            child.destroy()
-            element.removeChild(child.el())
-          }
-          previousChildren.delete(key)
-        }
-      }
       nextKeys.clear()
       preservedElements.clear()
       setPool.free(nextKeys)
       setPool.free(preservedElements)
-      previousKeys = nextKeysArr
+      currentKeys = nextKeysArr
     }
 
     const destroy = () => {
@@ -914,7 +967,7 @@ import { HtmlAttribute } from './html-attributes'
         unregister()
       }
 
-      for (const child of previousChildren.values()) {
+      for (const child of currentChildren.values()) {
         if (child.type === ElementType.TextNode) {
           element.removeChild(child.node)
         } else {
@@ -923,7 +976,7 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      previousChildren.clear()
+      currentChildren.clear()
     }
 
     const el = () => element
@@ -984,7 +1037,12 @@ import { HtmlAttribute } from './html-attributes'
     state: State<StateT>,
     rootElement: HTMLElement
   ) => {
-    const element = createElement<PropsT, StateT>(rootDescriptor, { state })
+    const element = createElement<PropsT, StateT>(rootDescriptor, {
+      state,
+      updateStack: [],
+      mountStack: [],
+      currentlyExecutingUpdates: false,
+    })
     rootElement.appendChild(element.el())
   }
 

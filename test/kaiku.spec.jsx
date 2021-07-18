@@ -302,4 +302,22 @@ describe('kaiku', () => {
     expect(propUpdateCounter).toHaveBeenCalledTimes(6)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should not exhaust call stack with MANY nested elements', () => {
+    const state = createState({ amount: 10000 })
+
+    const RecursiveComponent = ({ n }) => {
+      if (n === 0) {
+        return <div>I am the final child!</div>
+      }
+
+      return <RecursiveComponent n={n - 1} />
+    }
+
+    const App = () => {
+      return <RecursiveComponent n={state.amount} />
+    }
+
+    render(<App />, state, document.body)
+  })
 })
