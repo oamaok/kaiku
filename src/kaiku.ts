@@ -19,6 +19,17 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
+  const getStack = (): string[] => {
+    try {
+      throw new Error()
+    } catch (err) {
+      return err.stack
+        .split('\n')
+        .map((v: string) => v.trim())
+        .slice(2)
+    }
+  }
+
   const assert: typeof __assert = __DEBUG__ ? __assert : () => undefined
 
   const TRACKED_EXECUTE = Symbol()
@@ -43,8 +54,8 @@ import { HtmlAttribute } from './html-attributes'
 
   type KaikuContext<StateT> = {
     state: State<StateT>
-    updateStack: (() => void)[]
-    mountStack: (() => void)[]
+    updateStack: Set<() => void>
+    mountStack: Set<() => void>
     currentlyExecutingUpdates: boolean
   }
 
@@ -146,8 +157,12 @@ import { HtmlAttribute } from './html-attributes'
       restorationSet = new Set()
     }
 
-    const illegalInvokation = () => {
-      throw new Error('Method of a pooled Set() illegally invoked')
+    const illegalInvokation = (stack: string[]) => () => {
+      throw new Error(
+        `Method of a pooled Set() illegally invoked. \n=== FREE STACK ===\n${stack.join(
+          '\n\t'
+        )}\n=== END FREE STACK ===`
+      )
     }
 
     const allocate = <T>(
@@ -180,13 +195,13 @@ import { HtmlAttribute } from './html-attributes'
       if (pool.length > SET_POOL_MAX_SIZE) return
 
       if (__DEBUG__) {
-        set.add = illegalInvokation
-        set.has = illegalInvokation
-        set.keys = illegalInvokation
-        set.clear = illegalInvokation
-        set.values = illegalInvokation
-        set.delete = illegalInvokation
-        set.forEach = illegalInvokation
+        set.add = illegalInvokation(getStack())
+        set.has = illegalInvokation(getStack())
+        set.keys = illegalInvokation(getStack())
+        set.clear = illegalInvokation(getStack())
+        set.values = illegalInvokation(getStack())
+        set.delete = illegalInvokation(getStack())
+        set.forEach = illegalInvokation(getStack())
       }
 
       pool.push(set)
@@ -203,19 +218,15 @@ import { HtmlAttribute } from './html-attributes'
     const IS_WRAPPED = Symbol()
     const trackedDependencyStack: Set<string>[] = []
     let dependencyMap = new Map<string, Set<Function>>()
-    let deferredUpdates = setPool.allocate<Function>()
+    let deferredUpdates = new Set<Function>()
     let deferredUpdateQueued = false
 
     const deferredUpdate = () => {
-      const updates = deferredUpdates
       deferredUpdateQueued = false
-      deferredUpdates = setPool.allocate()
-      for (const callback of updates) {
+      for (const callback of deferredUpdates) {
         callback()
+        deferredUpdates.delete(callback)
       }
-
-      updates.clear()
-      setPool.free(updates)
 
       assert(
         !deferredUpdates.size,
@@ -240,6 +251,10 @@ import { HtmlAttribute } from './html-attributes'
       dependencies: Set<string>,
       callback: Function
     ) => {
+      // TODO: Not sure if the necessity of adding this counts as a bug
+      // or not.
+      deferredUpdates.delete(callback)
+
       for (const depKey of dependencies) {
         const deps = dependencyMap.get(depKey)
         if (deps) {
@@ -490,6 +505,10 @@ import { HtmlAttribute } from './html-attributes'
     descriptor: ComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>
   ): Component<PropsT> => {
+    // Only used for debugging, don't rely on this. It should be dropped
+    // in production builds.
+    let destroyed = false
+
     let dependencies = setPool.allocate<string>()
     let currentLeaf: Element | null = null
     let currentProps: PropsT = descriptor.props
@@ -497,6 +516,8 @@ import { HtmlAttribute } from './html-attributes'
     let effects: number[] | null = null
 
     const update = (nextProps: PropsT = currentProps) => {
+      assert(!destroyed, 'update() called even after component was destroyed')
+
       if (nextProps !== currentProps) {
         const properties = union(
           Object.keys(nextProps),
@@ -530,6 +551,8 @@ import { HtmlAttribute } from './html-attributes'
       nextLeafDescriptor = leafDescriptor
       context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
 
+      dependencies.clear()
+      setPool.free(dependencies)
       dependencies = nextDependencies
       currentProps = nextProps
 
@@ -539,17 +562,19 @@ import { HtmlAttribute } from './html-attributes'
         continueEffectTracking()
       }
 
-      context.updateStack.push(updateLeaf)
+      context.updateStack.add(updateLeaf)
 
       if (!context.currentlyExecutingUpdates) {
         context.currentlyExecutingUpdates = true
 
-        let fn
-        while ((fn = context.updateStack.pop())) {
+        for (const fn of context.updateStack) {
           fn()
+          context.updateStack.delete(fn)
         }
-        while ((fn = context.mountStack.pop())) {
+
+        for (const fn of context.mountStack) {
           fn()
+          context.mountStack.delete(fn)
         }
 
         context.currentlyExecutingUpdates = false
@@ -572,6 +597,13 @@ import { HtmlAttribute } from './html-attributes'
     const destroy = () => {
       assert(currentLeaf)
       assert(effects)
+
+      // This `if` is to ensure the `destroyed` flag is dropped in
+      // production builds.
+      if (__DEBUG__) {
+        assert(!destroyed)
+        destroyed = true
+      }
 
       currentLeaf.destroy()
       unregisterEffects(effects)
@@ -865,8 +897,8 @@ import { HtmlAttribute } from './html-attributes'
       currentProps = nextProps
       nextChildren = children
 
-      context.updateStack.push(updateChildren)
-      context.mountStack.push(mountChildren)
+      context.updateStack.add(updateChildren)
+      context.mountStack.add(mountChildren)
     }
 
     const updateChildren = () => {
@@ -879,7 +911,6 @@ import { HtmlAttribute } from './html-attributes'
       preservedElements = setPool.allocate(
         longestCommonSubsequence(currentKeys, nextKeysArr)
       )
-      currentKeys = nextKeysArr
 
       for (const key of preservedElements) {
         const nextChild = flattenedChildren.get(key)
@@ -925,18 +956,6 @@ import { HtmlAttribute } from './html-attributes'
       assert(nextKeysArr)
       assert(preservedElements)
 
-      for (const [key, child] of currentChildren) {
-        if (!nextKeys.has(key)) {
-          if (child.type === ElementType.TextNode) {
-            element.removeChild(child.node)
-          } else {
-            child.destroy()
-            element.removeChild(child.el())
-          }
-          currentChildren.delete(key)
-        }
-      }
-
       for (let i = nextKeysArr.length - 1; i >= 0; i--) {
         const key = nextKeysArr[i]
         const prevKey = nextKeysArr[i + 1]
@@ -956,6 +975,19 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
+      for (const [key, child] of currentChildren) {
+        if (!nextKeys.has(key)) {
+          if (child.type === ElementType.TextNode) {
+            element.removeChild(child.node)
+          } else {
+            element.removeChild(child.el())
+            child.destroy()
+          }
+          currentChildren.delete(key)
+        }
+      }
+
+      currentKeys = nextKeysArr
       nextKeys.clear()
       preservedElements.clear()
       setPool.free(nextKeys)
@@ -971,8 +1003,8 @@ import { HtmlAttribute } from './html-attributes'
         if (child.type === ElementType.TextNode) {
           element.removeChild(child.node)
         } else {
-          child.destroy()
           element.removeChild(child.el())
+          child.destroy()
         }
       }
 
@@ -1039,8 +1071,8 @@ import { HtmlAttribute } from './html-attributes'
   ) => {
     const element = createElement<PropsT, StateT>(rootDescriptor, {
       state,
-      updateStack: [],
-      mountStack: [],
+      updateStack: new Set(),
+      mountStack: new Set(),
       currentlyExecutingUpdates: false,
     })
     rootElement.appendChild(element.el())
