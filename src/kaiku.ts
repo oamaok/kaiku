@@ -879,6 +879,7 @@ import { HtmlAttribute } from './html-attributes'
       preservedElements = setPool.allocate(
         longestCommonSubsequence(currentKeys, nextKeysArr)
       )
+      currentKeys = nextKeysArr
 
       for (const key of preservedElements) {
         const nextChild = flattenedChildren.get(key)
@@ -959,7 +960,6 @@ import { HtmlAttribute } from './html-attributes'
       preservedElements.clear()
       setPool.free(nextKeys)
       setPool.free(preservedElements)
-      currentKeys = nextKeysArr
     }
 
     const destroy = () => {
