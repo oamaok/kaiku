@@ -1,3 +1,6 @@
+import { expect } from '@jest/globals'
+import blns from './blns.base64'
+
 const getKaiku = () => {
   switch (process.env.KAIKU_VERSION) {
     case 'minified':
@@ -135,7 +138,7 @@ describe('kaiku', () => {
     const state = createState({
       a: 0,
       b: 0,
-      c: 0
+      c: 0,
     })
 
     const App = () => {
@@ -150,7 +153,6 @@ describe('kaiku', () => {
       })
       return <div>{state.c}</div>
     }
-
 
     render(<App />, rootNode, state)
     expect(effectCallCounter).toHaveBeenCalledTimes(1)
@@ -444,6 +446,23 @@ describe('kaiku', () => {
 
     state.foo = true
     await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should render every item in the Big List of Naughty Strings', async () => {
+    const decodedItems = blns.map((item) =>
+      Buffer.from(item, 'base64').toString()
+    )
+    const App = () => (
+      <div>
+        {decodedItems.map((item) => (
+          <span>{item}</span>
+        ))}
+      </div>
+    )
+
+    render(<App />, rootNode)
+    expect(document.querySelectorAll('span').length).toBe(decodedItems.length)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })
