@@ -1108,7 +1108,6 @@ import { HtmlAttribute } from './html-attributes'
       },
       rootElement
     )
-    rootElement.appendChild(element.el())
   }
 
   const kaiku = {
