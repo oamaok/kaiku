@@ -977,7 +977,7 @@ import { HtmlAttribute } from './html-attributes'
 
         if (!wasReused) {
           if (typeof nextChild === 'number' || typeof nextChild === 'string') {
-            const node = document.createTextNode(String(nextChild))
+            const node = document.createTextNode(nextChild as string)
             currentChildren.set(key, {
               type: ElementType.TextNode,
               node,
@@ -1104,11 +1104,15 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
-  const render = <PropsT, StateT>(
+  const render = <PropsT, StateT = object>(
     rootDescriptor: ElementDescriptor<PropsT>,
-    state: State<StateT>,
-    rootElement: HTMLElement
+    rootElement: HTMLElement,
+    state?: State<StateT>
   ) => {
+    if (!state) {
+      state = createState({}) as State<StateT>
+    }
+
     createElement<PropsT, StateT>(
       rootDescriptor,
       {

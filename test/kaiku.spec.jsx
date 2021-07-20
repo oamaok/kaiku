@@ -26,7 +26,7 @@ describe('kaiku', () => {
 
     const App = () => <span id="test">Hello world!</span>
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
 
     const span = document.getElementById('test')
 
@@ -52,7 +52,7 @@ describe('kaiku', () => {
       </div>
     )
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
 
     const displayElem = document.querySelector('#display')
     const buttonElem = document.querySelector('button')
@@ -68,10 +68,6 @@ describe('kaiku', () => {
   })
 
   it('should update a simple counter using local state', async () => {
-    const state = createState({
-      foo: 0,
-    })
-
     const Counter = () => {
       const local = useState({ counter: 0 })
       return (
@@ -82,7 +78,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<Counter />, state, rootNode)
+    render(<Counter />, rootNode)
 
     const displayElem = document.querySelector('span')
     const buttonElem = document.querySelector('button')
@@ -117,7 +113,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<Component />, state, rootNode)
+    render(<Component />, rootNode, state)
 
     const element = document.querySelector('#test')
 
@@ -154,7 +150,7 @@ describe('kaiku', () => {
       return <div />
     }
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
     expect(effectCallCounter).toHaveBeenCalledTimes(1)
 
     state.a++
@@ -219,7 +215,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<List />, state, rootNode)
+    render(<List />, rootNode, state)
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
@@ -308,7 +304,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<List />, state, rootNode)
+    render(<List />, rootNode, state)
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
@@ -348,7 +344,7 @@ describe('kaiku', () => {
       return <RecursiveComponent n={state.amount} />
     }
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.amount = 1
@@ -366,7 +362,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -386,7 +382,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -410,7 +406,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -430,7 +426,7 @@ describe('kaiku', () => {
 
     const App = () => (state.foo ? <SpanChild /> : <DivChild />)
 
-    render(<App />, state, rootNode)
+    render(<App />, rootNode, state)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.foo = true
