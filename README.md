@@ -16,7 +16,7 @@ Kaiku is packaged to be easily used in both browser and as a module, no build to
 
   const App = () => h('span', null, state.greeting)
 
-  render(h(App), state, document.body)
+  render(h(App), document.body, state)
 </script>
 ```
 
@@ -59,7 +59,7 @@ const Counter = () => (
   </div>
 )
 
-render(<Counter />, state, document.body)
+render(<Counter />, document.body, state)
 ```
 
 ## License
