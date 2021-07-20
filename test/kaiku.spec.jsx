@@ -9,7 +9,7 @@ const getKaiku = () => {
   }
 }
 
-const { h, render, createState, effect } = getKaiku()
+const { h, render, createState, useEffect, useState } = getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -67,6 +67,36 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should update a simple counter using local state', async () => {
+    const state = createState({
+      foo: 0,
+    })
+
+    const Counter = () => {
+      const local = useState({ counter: 0 })
+      return (
+        <div>
+          <span>The counter is at {local.counter}</span>
+          <button onClick={() => local.counter++}>Add one!</button>
+        </div>
+      )
+    }
+
+    render(<Counter />, state, rootNode)
+
+    const displayElem = document.querySelector('span')
+    const buttonElem = document.querySelector('button')
+
+    expect(displayElem.innerHTML).toBe('The counter is at 0')
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    buttonElem.click()
+    await nextTick()
+
+    expect(displayElem.innerHTML).toBe('The counter is at 1')
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should only update dependant attributes without re-render', async () => {
     const propUpdateCounter = jest.fn()
     const reRenderCounter = jest.fn()
@@ -103,7 +133,7 @@ describe('kaiku', () => {
     expect(element.getAttribute('name')).toBe('bar')
   })
 
-  it('should fire effect hooks properly', async () => {
+  it('should fire useEffect hooks properly', async () => {
     const effectCallCounter = jest.fn()
 
     const state = createState({
@@ -112,7 +142,7 @@ describe('kaiku', () => {
     })
 
     const App = () => {
-      effect(() => {
+      useEffect(() => {
         effectCallCounter()
 
         if (state.a === 2) {
