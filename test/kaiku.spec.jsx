@@ -135,6 +135,7 @@ describe('kaiku', () => {
     const state = createState({
       a: 0,
       b: 0,
+      c: 0
     })
 
     const App = () => {
@@ -147,38 +148,50 @@ describe('kaiku', () => {
           }
         }
       })
-      return <div />
+      return <div>{state.c}</div>
     }
+
 
     render(<App />, rootNode, state)
     expect(effectCallCounter).toHaveBeenCalledTimes(1)
 
+    // Updating `state.c` shouldn't affect things, so let's litter them around
+    state.c++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+
     state.a++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(2)
 
     // `state.b` shouldn't yet be a dependency, so the hook must not be called
     state.b++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(2)
 
     // `state.a` will be set to 2
     state.a++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(3)
 
     // `state.b` should now be a dependency
     state.b++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(4)
 
     // `state.a` will be set to 3
     state.a++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
 
     // `state.b` should once again not be a dependency
     state.b++
+    state.c++
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
