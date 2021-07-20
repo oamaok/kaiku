@@ -303,7 +303,7 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it('should not exhaust call stack with MANY nested elements', () => {
+  it('should not exhaust call stack with MANY nested elements', async () => {
     const state = createState({ amount: 10000 })
 
     const RecursiveComponent = ({ n }) => {
@@ -318,6 +318,93 @@ describe('kaiku', () => {
       return <RecursiveComponent n={state.amount} />
     }
 
-    render(<App />, state, document.body)
+    render(<App />, state, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.amount = 1
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should support conditional classNames', async () => {
+    const state = createState({ foo: false })
+
+    const App = () => (
+      <div
+        id="test"
+        className={['always-here', { 'sometimes-here': state.foo }]}
+      />
+    )
+
+    render(<App />, state, rootNode)
+
+    const element = document.querySelector('#test')
+    expect(element.className).toBe('always-here')
+
+    state.foo = true
+    await nextTick()
+    expect(element.className).toBe('always-here sometimes-here')
+  })
+
+  it('should support lazy conditional classNames', async () => {
+    const state = createState({ foo: false })
+
+    const App = () => (
+      <div
+        id="test"
+        className={() => ['always-here', { 'sometimes-here': state.foo }]}
+      />
+    )
+
+    render(<App />, state, rootNode)
+
+    const element = document.querySelector('#test')
+    expect(element.className).toBe('always-here')
+
+    state.foo = true
+    await nextTick()
+    expect(element.className).toBe('always-here sometimes-here')
+  })
+
+  it('should support multiple conditional classNames', async () => {
+    const state = createState({ foo: false })
+
+    const App = () => (
+      <div
+        id="test"
+        className={() => [
+          'always-here',
+          { 'sometimes-here': state.foo, 'also-here': state.foo },
+          { 'you-didnt-expect-me-to-be-here': state.foo },
+        ]}
+      />
+    )
+
+    render(<App />, state, rootNode)
+
+    const element = document.querySelector('#test')
+    expect(element.className).toBe('always-here')
+
+    state.foo = true
+    await nextTick()
+    expect(element.className).toBe(
+      'always-here sometimes-here also-here you-didnt-expect-me-to-be-here'
+    )
+  })
+
+  it('should handle changing rootNode.firstChild', async () => {
+    const state = createState({ foo: false })
+
+    const SpanChild = () => <span>Hello, I am a span tag!</span>
+    const DivChild = () => <div>Hello, I am a div tag!</div>
+
+    const App = () => (state.foo ? <SpanChild /> : <DivChild />)
+
+    render(<App />, state, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.foo = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })

@@ -195,13 +195,14 @@ import { HtmlAttribute } from './html-attributes'
       if (pool.length > SET_POOL_MAX_SIZE) return
 
       if (__DEBUG__) {
-        set.add = illegalInvokation(getStack())
-        set.has = illegalInvokation(getStack())
-        set.keys = illegalInvokation(getStack())
-        set.clear = illegalInvokation(getStack())
-        set.values = illegalInvokation(getStack())
-        set.delete = illegalInvokation(getStack())
-        set.forEach = illegalInvokation(getStack())
+        set.add =
+          set.has =
+          set.keys =
+          set.clear =
+          set.values =
+          set.delete =
+          set.forEach =
+            illegalInvokation(getStack())
       }
 
       pool.push(set)
@@ -224,7 +225,16 @@ import { HtmlAttribute } from './html-attributes'
     const deferredUpdate = () => {
       deferredUpdateQueued = false
       for (const callback of deferredUpdates) {
+        const size = deferredUpdates.size
         callback()
+
+        if (__DEBUG__) {
+          assert(
+            size >= deferredUpdates.size,
+            'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
+          )
+        }
+
         deferredUpdates.delete(callback)
       }
 
@@ -503,7 +513,8 @@ import { HtmlAttribute } from './html-attributes'
 
   const createComponent = <PropsT, StateT>(
     descriptor: ComponentDescriptor<PropsT>,
-    context: KaikuContext<StateT>
+    context: KaikuContext<StateT>,
+    rootElement?: HTMLElement
   ): Component<PropsT> => {
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
@@ -585,13 +596,27 @@ import { HtmlAttribute } from './html-attributes'
       assert(nextLeafDescriptor)
       const wasReused =
         currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
+
       if (wasReused) return
 
       if (currentLeaf) {
         currentLeaf.destroy()
       }
 
-      currentLeaf = createElement(nextLeafDescriptor, context)
+      if (!rootElement) {
+        currentLeaf = createElement(nextLeafDescriptor, context)
+        return
+      }
+
+      if (nextLeafDescriptor.type === ElementDescriptorType.Component) {
+        currentLeaf = createElement(nextLeafDescriptor, context, rootElement)
+      } else if (nextLeafDescriptor.type === ElementDescriptorType.HtmlTag) {
+        currentLeaf = createElement(nextLeafDescriptor, context)
+        if (rootElement.firstChild) {
+          rootElement.removeChild(rootElement.firstChild)
+        }
+        rootElement.appendChild(currentLeaf.el())
+      }
     }
 
     const destroy = () => {
@@ -644,15 +669,18 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     if (Array.isArray(names)) {
-      return names.map((name) => stringifyClassNames(name)).join(' ')
+      return names
+        .map((name) => stringifyClassNames(name))
+        .join(' ')
+        .trim()
     }
 
     let className = ''
     const keys = Object.keys(names)
     for (const key of keys) {
-      if (names[key]) className += key
+      if (names[key]) className += key + ' '
     }
-    return className
+    return className.trim()
   }
 
   const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
@@ -756,7 +784,7 @@ import { HtmlAttribute } from './html-attributes'
     if (
       nextChild.type === ElementDescriptorType.Component &&
       prevChild.type === ElementType.Component &&
-      prevChild.component === prevChild.component
+      nextChild.component === prevChild.component
     ) {
       prevChild.update(nextChild.props)
       return true
@@ -1026,10 +1054,11 @@ import { HtmlAttribute } from './html-attributes'
 
   const createElement = <PropsT, StateT>(
     descriptor: ElementDescriptor<PropsT>,
-    context: KaikuContext<StateT>
+    context: KaikuContext<StateT>,
+    rootElement?: HTMLElement
   ): Element<PropsT> => {
     if (descriptor.type === ElementDescriptorType.Component) {
-      return createComponent(descriptor, context)
+      return createComponent(descriptor, context, rootElement)
     }
     return createHtmlTag(descriptor, context)
   }
@@ -1069,12 +1098,16 @@ import { HtmlAttribute } from './html-attributes'
     state: State<StateT>,
     rootElement: HTMLElement
   ) => {
-    const element = createElement<PropsT, StateT>(rootDescriptor, {
-      state,
-      updateStack: new Set(),
-      mountStack: new Set(),
-      currentlyExecutingUpdates: false,
-    })
+    const element = createElement<PropsT, StateT>(
+      rootDescriptor,
+      {
+        state,
+        updateStack: new Set(),
+        mountStack: new Set(),
+        currentlyExecutingUpdates: false,
+      },
+      rootElement
+    )
     rootElement.appendChild(element.el())
   }
 

@@ -1,5 +1,9 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`kaiku should handle changing rootNode.firstChild 1`] = `"<div>Hello, I am a div tag!</div>"`;
+
+exports[`kaiku should handle changing rootNode.firstChild 2`] = `"<span>Hello, I am a span tag!</span>"`;
+
 exports[`kaiku should handle updates in an array efficiently 1`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"`;
 
 exports[`kaiku should handle updates in an array efficiently 2`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"`;
@@ -11,6 +15,10 @@ exports[`kaiku should handle updates in an array efficiently 4`] = `"<div><div>H
 exports[`kaiku should handle updates in an array efficiently 5`] = `"<div><div>Hello, I am item number 4</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"`;
 
 exports[`kaiku should handle updates in an array efficiently 6`] = `"<div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"`;
+
+exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<div>I am the final child!</div>"`;
+
+exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;
 
 exports[`kaiku should update a simple counter 1`] = `"<div class=\\"app\\"><span id=\\"display\\">The counter is at 0</span><button>Add one!</button></div>"`;
 

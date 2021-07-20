@@ -6,6 +6,7 @@ module.exports = {
     project: './tsconfig.json',
   },
   rules: {
+    'no-self-compare': 'error',
     '@typescript-eslint/strict-boolean-expressions': [
       'error',
       {
