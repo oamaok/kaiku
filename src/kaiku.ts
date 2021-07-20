@@ -244,6 +244,7 @@ import { HtmlAttribute } from './html-attributes'
       )
     }
 
+    const reusedReturnTuple: any[] = []
     const trackedExectute = <F extends (...args: any[]) => any>(
       fn: F,
       ...args: Parameters<F>
@@ -254,7 +255,10 @@ import { HtmlAttribute } from './html-attributes'
 
       assert(dependencies)
 
-      return [dependencies, result]
+      const ret = reusedReturnTuple as [Set<string>, ReturnType<F>]
+      ret[0] = dependencies
+      ret[1] = result
+      return ret
     }
 
     const removeDependencies = (
