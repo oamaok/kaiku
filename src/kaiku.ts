@@ -35,6 +35,8 @@ import { HtmlAttribute } from './html-attributes'
   const TRACKED_EXECUTE = Symbol()
   const REMOVE_DEPENDENCIES = Symbol()
   const UPDATE_DEPENDENCIES = Symbol()
+  const GET_LOCAL_STATE = Symbol()
+  const DELETE_LOCAL_STATE = Symbol()
 
   type State<T> = T & {
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
@@ -50,6 +52,11 @@ import { HtmlAttribute } from './html-attributes'
       nextDependencies: Set<string>,
       callback: Function
     ) => void
+    [GET_LOCAL_STATE]: <T extends object>(
+      componentId: number,
+      state: T
+    ) => State<T>
+    [DELETE_LOCAL_STATE]: (componentId: number) => void
   }
 
   type KaikuContext<StateT> = {
@@ -216,8 +223,11 @@ import { HtmlAttribute } from './html-attributes'
   const createState = <StateT extends object>(
     initialState: StateT
   ): State<StateT> => {
+    let nextObjectId = 0
+
     const IS_WRAPPED = Symbol()
     const trackedDependencyStack: Set<string>[] = []
+    const localState = new Map<number, State<any>>()
     let dependencyMap = new Map<string, Set<Function>>()
     let deferredUpdates = new Set<Function>()
     let deferredUpdateQueued = false
@@ -228,12 +238,10 @@ import { HtmlAttribute } from './html-attributes'
         const size = deferredUpdates.size
         callback()
 
-        if (__DEBUG__) {
-          assert(
-            size >= deferredUpdates.size,
-            'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
-          )
-        }
+        assert(
+          size >= deferredUpdates.size,
+          'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
+        )
 
         deferredUpdates.delete(callback)
       }
@@ -311,9 +319,26 @@ import { HtmlAttribute } from './html-attributes'
       }
     }
 
-    let nextId = 0
+    const getLocalState = <T extends object>(
+      componentId: number,
+      state: T
+    ): State<T> => {
+      const existingState: State<T> | undefined = localState.get(componentId)
+      if (existingState) {
+        return existingState
+      } else {
+        const wrapped = wrap(state)
+        localState.set(componentId, wrapped)
+        return wrapped as State<T>
+      }
+    }
+
+    const deleteLocalState = (componentId: number) => {
+      localState.delete(componentId)
+    }
+
     const wrap = <T extends object>(obj: T) => {
-      const id = ++nextId
+      const id = ++nextObjectId
 
       const isArray = Array.isArray(obj)
 
@@ -326,6 +351,10 @@ import { HtmlAttribute } from './html-attributes'
               return removeDependencies
             case UPDATE_DEPENDENCIES:
               return updateDependencies
+            case GET_LOCAL_STATE:
+              return getLocalState
+            case DELETE_LOCAL_STATE:
+              return deleteLocalState
             case IS_WRAPPED:
               return true
           }
@@ -398,109 +427,93 @@ import { HtmlAttribute } from './html-attributes'
     return state as State<StateT>
   }
 
-  const createEffect = () => {
-    let trackStack: boolean[] = []
-    let stateStack: State<object>[] = []
-    const effectStack: number[][] = []
+  // Hooks and their internal state
+  const effects = new Map<number, Effect[]>()
+  const componentIdStack: number[] = []
+  const stateStack: State<object>[] = []
+  const componentsThatHaveUpdatedAtLeastOnce = new Set<number>()
 
-    const startEffectTracking = (state: State<any>) => {
-      stateStack.push(state)
-      effectStack.push([])
-      trackStack.push(true)
-    }
+  type Effect = {
+    state: State<object>
+    dependencies: Set<string>
+    callback: () => void
+  }
 
-    const stopEffectTracking = (): number[] => {
-      const state = stateStack.pop()
-      const effectIds = effectStack.pop()
-      trackStack.pop()
-      assert(state)
-      assert(effectIds)
+  const startHookTracking = (componentId: number, state: State<any>) => {
+    stateStack.push(state)
+    componentIdStack.push(componentId)
+  }
 
-      return effectIds
-    }
+  const stopHookTracking = () => {
+    const state = stateStack.pop()
+    assert(state)
 
-    const pauseEffectTracking = () => {
-      trackStack.push(false)
-    }
+    const componentId = componentIdStack.pop()
+    assert(typeof componentId !== 'undefined')
+    componentsThatHaveUpdatedAtLeastOnce.add(componentId)
+  }
 
-    const continueEffectTracking = () => {
-      trackStack.pop()
-    }
+  const destroyHooks = (componentId: number) => {
+    const componentEffects = effects.get(componentId)
+    if (!componentEffects) return
 
-    type Effect = {
-      state: State<object>
-      dependencies: Set<string>
-      callback: () => void
-    }
-
-    const effects: Map<number, Effect> = new Map()
-    let nextId = 0
-
-    const effect = (fn: () => void) => {
-      if (!trackStack[trackStack.length - 1]) {
-        return
-      }
-
-      const id = ++nextId
-      const state = stateStack[stateStack.length - 1] as
-        | State<object>
-        | undefined
-
-      assert(state)
-
-      const run = () => {
-        const eff = effects.get(id)
-        assert(eff)
-
-        const [nextDependencies] = state[TRACKED_EXECUTE](fn)
-        state[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, run)
-
-        eff.dependencies.clear()
-        setPool.free(eff.dependencies)
-
-        eff.dependencies = nextDependencies
-      }
-
-      effects.set(id, {
-        state,
-        dependencies: setPool.allocate(),
-        callback: run,
-      })
-      effectStack[effectStack.length - 1].push(id)
-
-      run()
-    }
-
-    const unregisterEffects = (effectIds: number[]) => {
-      for (let id; (id = effectIds.pop()) !== undefined; ) {
-        const eff = effects.get(id)
-        assert(eff)
-
-        eff.state[REMOVE_DEPENDENCIES](eff.dependencies, eff.callback)
-        eff.dependencies.clear()
-        setPool.free(eff.dependencies)
-        effects.delete(id)
-      }
-    }
-
-    return {
-      startEffectTracking,
-      stopEffectTracking,
-      unregisterEffects,
-      effect,
-      pauseEffectTracking,
-      continueEffectTracking,
+    for (const effect of componentEffects) {
+      effect.state[REMOVE_DEPENDENCIES](effect.dependencies, effect.callback)
+      effect.dependencies.clear()
+      setPool.free(effect.dependencies)
     }
   }
 
-  const {
-    startEffectTracking,
-    stopEffectTracking,
-    continueEffectTracking,
-    pauseEffectTracking,
-    unregisterEffects,
-    effect,
-  } = createEffect()
+  const useEffect = (fn: () => void) => {
+    const componentId = componentIdStack[componentIdStack.length - 1]
+    assert(typeof componentId !== 'undefined')
+
+    if (componentsThatHaveUpdatedAtLeastOnce.has(componentId)) {
+      return
+    }
+
+    const state = stateStack[stateStack.length - 1] as State<object> | undefined
+    assert(state)
+
+    const run = () => {
+      const [nextDependencies] = state[TRACKED_EXECUTE](fn)
+      state[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, run)
+
+      eff.dependencies.clear()
+      setPool.free(eff.dependencies)
+
+      eff.dependencies = nextDependencies
+    }
+
+    const eff: Effect = {
+      state,
+      dependencies: setPool.allocate(),
+      callback: run,
+    }
+
+    run()
+
+    let componentEffects = effects.get(componentId)
+    if (!componentEffects) {
+      componentEffects = []
+      effects.set(componentId, componentEffects)
+    }
+    assert(componentEffects)
+    componentEffects.push(eff)
+  }
+
+  const useState = <T extends object>(initialState: T) => {
+    const componentId = componentIdStack[componentIdStack.length - 1]
+    const state = stateStack[stateStack.length - 1] as State<object> | undefined
+
+    assert(state)
+    assert(typeof componentId !== 'undefined')
+
+    return state[GET_LOCAL_STATE](componentId, initialState)
+  }
+
+  // Components and HTML rendering
+  let nextComponentId = 0
 
   const createComponentDescriptor = <PropsT>(
     component: ComponentFunction<PropsT>,
@@ -520,6 +533,8 @@ import { HtmlAttribute } from './html-attributes'
     context: KaikuContext<StateT>,
     rootElement?: HTMLElement
   ): Component<PropsT> => {
+    const id = ++nextComponentId
+
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
     let destroyed = false
@@ -528,7 +543,6 @@ import { HtmlAttribute } from './html-attributes'
     let currentLeaf: Element | null = null
     let currentProps: PropsT = descriptor.props
     let nextLeafDescriptor: ElementDescriptor | null = null
-    let effects: number[] | null = null
 
     const update = (nextProps: PropsT = currentProps) => {
       assert(!destroyed, 'update() called even after component was destroyed')
@@ -553,16 +567,13 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      if (!effects) {
-        startEffectTracking(context.state)
-      } else {
-        pauseEffectTracking()
-      }
-
+      startHookTracking(id, context.state)
       const [nextDependencies, leafDescriptor] = context.state[TRACKED_EXECUTE](
         descriptor.component,
         nextProps
       )
+      stopHookTracking()
+
       nextLeafDescriptor = leafDescriptor
       context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, update)
 
@@ -570,12 +581,6 @@ import { HtmlAttribute } from './html-attributes'
       setPool.free(dependencies)
       dependencies = nextDependencies
       currentProps = nextProps
-
-      if (!effects) {
-        effects = stopEffectTracking()
-      } else {
-        continueEffectTracking()
-      }
 
       context.updateStack.add(updateLeaf)
 
@@ -634,9 +639,10 @@ import { HtmlAttribute } from './html-attributes'
         destroyed = true
       }
 
+      destroyHooks(id)
       currentLeaf.destroy()
-      unregisterEffects(effects)
       context.state[REMOVE_DEPENDENCIES](dependencies, update)
+      context.state[DELETE_LOCAL_STATE](id)
       dependencies.clear()
       setPool.free(dependencies)
     }
@@ -687,6 +693,7 @@ import { HtmlAttribute } from './html-attributes'
     return className.trim()
   }
 
+  // TODO: Add special cases for short arrays
   const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
     const C: number[] = Array(a.length * b.length).fill(0)
 
@@ -1102,7 +1109,7 @@ import { HtmlAttribute } from './html-attributes'
     state: State<StateT>,
     rootElement: HTMLElement
   ) => {
-    const element = createElement<PropsT, StateT>(
+    createElement<PropsT, StateT>(
       rootDescriptor,
       {
         state,
@@ -1118,7 +1125,8 @@ import { HtmlAttribute } from './html-attributes'
     h,
     render,
     createState,
-    effect,
+    useEffect,
+    useState,
   }
 
   if (typeof module !== 'undefined') {

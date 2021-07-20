@@ -24,6 +24,10 @@ exports[`kaiku should update a simple counter 1`] = `"<div class=\\"app\\"><span
 
 exports[`kaiku should update a simple counter 2`] = `"<div class=\\"app\\"><span id=\\"display\\">The counter is at 1</span><button>Add one!</button></div>"`;
 
+exports[`kaiku should update a simple counter using local state 1`] = `"<div><span>The counter is at 0</span><button>Add one!</button></div>"`;
+
+exports[`kaiku should update a simple counter using local state 2`] = `"<div><span>The counter is at 1</span><button>Add one!</button></div>"`;
+
 exports[`kaiku should update lazy props efficiently 1`] = `"<div id=\\"list\\"><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div></div>"`;
 
 exports[`kaiku should update lazy props efficiently 2`] = `"<div id=\\"list\\"><div style=\\"border-width: 10px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div></div>"`;

@@ -25,7 +25,7 @@ terser
     },
     mangle: {
       properties: {
-        reserved: ['h', 'render', 'createState', 'effect'],
+        reserved: ['h', 'render', 'createState', 'useEffect', 'useState'],
       },
     },
   })
