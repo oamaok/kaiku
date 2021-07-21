@@ -450,6 +450,8 @@ import { HtmlAttribute } from './html-attributes'
   }
 
   const destroyHooks = (componentId: number) => {
+    componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
+
     const componentEffects = effects.get(componentId)
     if (!componentEffects) return
 
@@ -544,9 +546,10 @@ import { HtmlAttribute } from './html-attributes'
       assert(!destroyed, 'update() called even after component was destroyed')
 
       if (nextProps !== currentProps) {
-        const properties = union(Object.keys(nextProps), Object.keys(currentProps)) as Set<
-          keyof PropsT
-        >
+        const properties = union(
+          Object.keys(nextProps),
+          Object.keys(currentProps)
+        ) as Set<keyof PropsT>
 
         let unchanged = true
         for (const property of properties) {
@@ -851,9 +854,10 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const update = (nextProps: HtmlTagProps, children: Children) => {
-      const keys = union(Object.keys(nextProps), Object.keys(currentProps)) as Set<
-        keyof HtmlTagProps
-      >
+      const keys = union(
+        Object.keys(nextProps),
+        Object.keys(currentProps)
+      ) as Set<keyof HtmlTagProps>
 
       for (let unregister; (unregister = lazyUpdates.pop()); ) {
         unregister()
