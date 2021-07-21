@@ -22,6 +22,8 @@ terser
   .minify(fs.readFileSync('dist/kaiku.min.js').toString(), {
     compress: {
       passes: 3,
+      unsafe: true,
+      booleans_as_integers: true,
     },
     mangle: {
       properties: {

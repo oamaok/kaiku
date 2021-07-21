@@ -337,6 +337,15 @@ import { HtmlAttribute } from './html-attributes'
       localState.delete(componentId)
     }
 
+    const internals = {
+      [IS_WRAPPED]: true,
+      [TRACKED_EXECUTE]: trackedExectute,
+      [REMOVE_DEPENDENCIES]: removeDependencies,
+      [UPDATE_DEPENDENCIES]: updateDependencies,
+      [GET_LOCAL_STATE]: getLocalState,
+      [DELETE_LOCAL_STATE]: deleteLocalState,
+    }
+
     const wrap = <T extends object>(obj: T) => {
       const id = ++nextObjectId
 
@@ -344,20 +353,7 @@ import { HtmlAttribute } from './html-attributes'
 
       const proxy = new Proxy(obj, {
         get(target, key) {
-          switch (key) {
-            case TRACKED_EXECUTE:
-              return trackedExectute
-            case REMOVE_DEPENDENCIES:
-              return removeDependencies
-            case UPDATE_DEPENDENCIES:
-              return updateDependencies
-            case GET_LOCAL_STATE:
-              return getLocalState
-            case DELETE_LOCAL_STATE:
-              return deleteLocalState
-            case IS_WRAPPED:
-              return true
-          }
+          if (key in internals) return internals[key as keyof typeof internals]
 
           if (typeof key === 'symbol') {
             return target[key as keyof T]
@@ -548,10 +544,9 @@ import { HtmlAttribute } from './html-attributes'
       assert(!destroyed, 'update() called even after component was destroyed')
 
       if (nextProps !== currentProps) {
-        const properties = union(
-          Object.keys(nextProps),
-          Object.keys(currentProps)
-        ) as Set<keyof PropsT>
+        const properties = union(Object.keys(nextProps), Object.keys(currentProps)) as Set<
+          keyof PropsT
+        >
 
         let unchanged = true
         for (const property of properties) {
@@ -856,10 +851,9 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const update = (nextProps: HtmlTagProps, children: Children) => {
-      const keys = union(
-        Object.keys(nextProps),
-        Object.keys(currentProps)
-      ) as Set<keyof HtmlTagProps>
+      const keys = union(Object.keys(nextProps), Object.keys(currentProps)) as Set<
+        keyof HtmlTagProps
+      >
 
       for (let unregister; (unregister = lazyUpdates.pop()); ) {
         unregister()
