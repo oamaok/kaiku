@@ -950,6 +950,8 @@ import { HtmlAttribute } from './html-attributes'
         longestCommonSubsequence(currentKeys, nextKeysArr)
       )
 
+      // Check if we can reuse any of the components/elements
+      // in the longest preserved key sequence.
       for (const key of preservedElements) {
         const nextChild = flattenedChildren.get(key)
         const prevChild = currentChildren.get(key)
@@ -960,10 +962,15 @@ import { HtmlAttribute } from './html-attributes'
         const wasReused = reuseChildElement(prevChild, nextChild)
 
         if (!wasReused) {
+          // Let's not mark the child as dead yet.
+          // It might be reused in the next loop.
           preservedElements.delete(key)
         }
       }
 
+      // Try to reuse old components/elements which share the key.
+      // If not reused, mark the previous child for destruction
+      // and create a new one in its place.
       for (const key of nextKeys) {
         if (preservedElements.has(key)) continue
 
@@ -992,6 +999,8 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
+      // Check which children will not be a part of the next render.
+      // Mark them for destruction and remove from currentChildren.
       for (const [key, child] of currentChildren) {
         if (!nextKeys.has(key)) {
           deadChildren.push(child)
@@ -1014,6 +1023,8 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
+      // Since DOM operations only allow you to append or insertBefore,
+      // we must start from the end of the keys.
       for (let i = nextKeysArr.length - 1; i >= 0; i--) {
         const key = nextKeysArr[i]
         const prevKey = nextKeysArr[i + 1]
