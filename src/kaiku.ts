@@ -818,6 +818,7 @@ import { HtmlAttribute } from './html-attributes'
     let nextChildren: Children | null = null
     let nextKeys: Set<string> | null = null
     let nextKeysArr: string[] | null = null
+    let deadChildren: ChildElement[] = []
     let preservedElements: Set<string> | null = null
 
     let lazyUpdates: (() => void)[] = []
@@ -974,6 +975,10 @@ import { HtmlAttribute } from './html-attributes'
         const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
 
         if (!wasReused) {
+          if (prevChild) {
+            deadChildren.push(prevChild)
+          }
+
           if (typeof nextChild === 'number' || typeof nextChild === 'string') {
             const node = document.createTextNode(nextChild as string)
             currentChildren.set(key, {
@@ -986,12 +991,28 @@ import { HtmlAttribute } from './html-attributes'
           currentChildren.set(key, createElement(nextChild, context))
         }
       }
+
+      for (const [key, child] of currentChildren) {
+        if (!nextKeys.has(key)) {
+          deadChildren.push(child)
+          currentChildren.delete(key)
+        }
+      }
     }
 
     const mountChildren = () => {
       assert(nextKeys)
       assert(nextKeysArr)
       assert(preservedElements)
+
+      for (let child; (child = deadChildren.pop()); ) {
+        if (child.type === ElementType.TextNode) {
+          element.removeChild(child.node)
+        } else {
+          element.removeChild(child.el())
+          child.destroy()
+        }
+      }
 
       for (let i = nextKeysArr.length - 1; i >= 0; i--) {
         const key = nextKeysArr[i]
@@ -1012,23 +1033,17 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      for (const [key, child] of currentChildren) {
-        if (!nextKeys.has(key)) {
-          if (child.type === ElementType.TextNode) {
-            element.removeChild(child.node)
-          } else {
-            element.removeChild(child.el())
-            child.destroy()
-          }
-          currentChildren.delete(key)
-        }
-      }
-
       currentKeys = nextKeysArr
       nextKeys.clear()
       preservedElements.clear()
       setPool.free(nextKeys)
       setPool.free(preservedElements)
+
+      if (__DEBUG__) {
+        nextKeys = null
+        nextKeysArr = null
+        preservedElements = null
+      }
     }
 
     const destroy = () => {

@@ -447,4 +447,22 @@ describe('kaiku', () => {
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should handle changing child type', async () => {
+    const state = createState({ a: true })
+
+    const App = () => {
+      return <div id="app">{state.a ? 'text' : <b>bold text</b>}</div>
+    }
+
+    render(<App />, rootNode, state)
+
+    for (let i = 0; i < 50; i++) {
+      state.a = !state.a
+      await nextTick()
+      expect(document.querySelector('#app').innerHTML).toEqual(
+        state.a ? 'text' : '<b>bold text</b>'
+      )
+    }
+  })
 })
