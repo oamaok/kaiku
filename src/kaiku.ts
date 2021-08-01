@@ -460,6 +460,7 @@ import { HtmlAttribute } from './html-attributes'
 
     const componentEffects = effects.get(componentId)
     if (!componentEffects) return
+    effects.delete(componentId)
 
     for (const effect of componentEffects) {
       effect.state[REMOVE_DEPENDENCIES](effect.dependencies, effect.callback)
@@ -815,6 +816,11 @@ import { HtmlAttribute } from './html-attributes'
   const getNodeOfChildElement = (child: ChildElement): HTMLElement | Text =>
     child.type === ElementType.TextNode ? child.node : child.el()
 
+  type LazyUpdate = {
+    callback: () => void
+    dependencies: Set<string>
+  }
+
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
@@ -822,6 +828,7 @@ import { HtmlAttribute } from './html-attributes'
     const element = document.createElement(descriptor.tag)
 
     let currentChildren: Map<string, ChildElement> = new Map()
+    let lazyChildren: Map<string, () => Child> = new Map()
     let currentKeys: string[] = []
     let currentProps: HtmlTagProps = {}
 
@@ -831,7 +838,7 @@ import { HtmlAttribute } from './html-attributes'
     let deadChildren: ChildElement[] = []
     let preservedElements: Set<string> | null = null
 
-    let lazyUpdates: (() => void)[] = []
+    let lazyUpdates: LazyUpdate[] = []
 
     const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
       if (typeof prop !== 'function') {
@@ -839,29 +846,45 @@ import { HtmlAttribute } from './html-attributes'
         return
       }
 
-      let dependencies = setPool.allocate<string>()
-
       const run = () => {
         const [nextDependencies, value] = context.state[TRACKED_EXECUTE](
           prop as () => T
         )
-        context.state[UPDATE_DEPENDENCIES](dependencies, nextDependencies, run)
-        dependencies.clear()
-        setPool.free(dependencies)
-        dependencies = nextDependencies
+        context.state[UPDATE_DEPENDENCIES](
+          lazyUpdate.dependencies,
+          nextDependencies,
+          run
+        )
+        lazyUpdate.dependencies.clear()
+        setPool.free(lazyUpdate.dependencies)
+        lazyUpdate.dependencies = nextDependencies
         handler(value)
+      }
+
+      const lazyUpdate: LazyUpdate = {
+        dependencies: setPool.allocate(),
+        callback: run,
       }
 
       run()
 
-      if (dependencies.size === 0) {
-        setPool.free(dependencies)
+      if (lazyUpdate.dependencies.size === 0) {
+        setPool.free(lazyUpdate.dependencies)
         return
       }
-      // TODO: Change this to use system similar to effects
-      lazyUpdates.push(() => {
-        context.state[REMOVE_DEPENDENCIES](dependencies, run)
-      })
+
+      lazyUpdates.push(lazyUpdate)
+    }
+
+    const destroyLazyUpdates = () => {
+      for (let lazyUpdate; (lazyUpdate = lazyUpdates.pop()); ) {
+        context.state[REMOVE_DEPENDENCIES](
+          lazyUpdate.dependencies,
+          lazyUpdate.callback
+        )
+        lazyUpdate.dependencies.clear()
+        setPool.free(lazyUpdate.dependencies)
+      }
     }
 
     const update = (nextProps: HtmlTagProps, children: Children) => {
@@ -870,9 +893,7 @@ import { HtmlAttribute } from './html-attributes'
         Object.keys(currentProps)
       ) as Set<keyof HtmlTagProps>
 
-      for (let unregister; (unregister = lazyUpdates.pop()); ) {
-        unregister()
-      }
+      destroyLazyUpdates()
 
       for (const key of keys) {
         if (currentProps[key] === nextProps[key]) continue
@@ -926,7 +947,7 @@ import { HtmlAttribute } from './html-attributes'
             }
             case 'className': {
               lazy(nextProps[key], (value) => {
-                element.setAttribute('class', stringifyClassNames(value ?? ''))
+                element.className = stringifyClassNames(value ?? '')
               })
               continue
             }
@@ -960,6 +981,7 @@ import { HtmlAttribute } from './html-attributes'
           // TODO: How to not allocate array here? Reuse? Something else?
           flattenChildren([child()], key + '.', flattenedChildren)
           flattenedChildren.delete(key)
+          lazyChildren.set(key, child)
         }
       }
 
@@ -1079,12 +1101,8 @@ import { HtmlAttribute } from './html-attributes'
       }
     }
 
-    const updateLazyChild = () => {}
-
     const destroy = () => {
-      for (let unregister; (unregister = lazyUpdates.pop()); ) {
-        unregister()
-      }
+      destroyLazyUpdates()
 
       for (const child of currentChildren.values()) {
         if (child.type === ElementType.TextNode) {
@@ -1094,8 +1112,6 @@ import { HtmlAttribute } from './html-attributes'
           child.destroy()
         }
       }
-
-      currentChildren.clear()
     }
 
     const el = () => element
