@@ -30,6 +30,8 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
+  const noop = () => undefined
+
   const assert: typeof __assert = __DEBUG__ ? __assert : () => undefined
 
   const TRACKED_EXECUTE = Symbol()
@@ -65,10 +67,11 @@ import { HtmlAttribute } from './html-attributes'
     mountStack: Set<() => void>
     currentlyExecutingUpdates: boolean
   }
-
   type RenderableChild = ElementDescriptor | string | number
   type Child =
-    | RenderableChild
+    | ElementDescriptor
+    | string
+    | number
     | boolean
     | null
     | undefined
@@ -737,46 +740,6 @@ import { HtmlAttribute } from './html-attributes'
     return res.reverse()
   }
 
-  const flattenChildren = (
-    children: Children,
-    keyPrefix: string = '',
-    result: Map<string, RenderableChild | (() => Child)> = new Map()
-  ): Map<string, RenderableChild | (() => Child)> => {
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]
-
-      if (
-        child === null ||
-        typeof child === 'boolean' ||
-        typeof child === 'undefined'
-      ) {
-        continue
-      }
-
-      if (Array.isArray(child)) {
-        flattenChildren(child, i + '.', result)
-        continue
-      }
-
-      if (
-        typeof child === 'string' ||
-        typeof child === 'number' ||
-        typeof child === 'function'
-      ) {
-        result.set(keyPrefix + i, child)
-        continue
-      }
-
-      result.set(
-        keyPrefix +
-          (typeof child.props.key !== 'undefined' ? '\\' + child.props.key : i),
-        child
-      )
-    }
-
-    return result
-  }
-
   const reuseChildElement = (
     prevChild: ChildElement,
     nextChild: RenderableChild
@@ -821,6 +784,14 @@ import { HtmlAttribute } from './html-attributes'
     dependencies: Set<string>
   }
 
+  type LazyChild = {
+    childFunction: () => Child
+    callback: () => void
+    dependencies: Set<string>
+    key: string
+    childKeys: string[]
+  }
+
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
@@ -828,7 +799,6 @@ import { HtmlAttribute } from './html-attributes'
     const element = document.createElement(descriptor.tag)
 
     let currentChildren: Map<string, ChildElement> = new Map()
-    let lazyChildren: Map<string, () => Child> = new Map()
     let currentKeys: string[] = []
     let currentProps: HtmlTagProps = {}
 
@@ -839,6 +809,7 @@ import { HtmlAttribute } from './html-attributes'
     let preservedElements: Set<string> | null = null
 
     let lazyUpdates: LazyUpdate[] = []
+    let lazyChildren: LazyChild[] = []
 
     const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
       if (typeof prop !== 'function') {
@@ -885,6 +856,15 @@ import { HtmlAttribute } from './html-attributes'
         lazyUpdate.dependencies.clear()
         setPool.free(lazyUpdate.dependencies)
       }
+
+      for (let lazyChild; (lazyChild = lazyChildren.pop()); ) {
+        context.state[REMOVE_DEPENDENCIES](
+          lazyChild.dependencies,
+          lazyChild.callback
+        )
+        lazyChild.dependencies.clear()
+        setPool.free(lazyChild.dependencies)
+      }
     }
 
     const update = (nextProps: HtmlTagProps, children: Children) => {
@@ -899,7 +879,8 @@ import { HtmlAttribute } from './html-attributes'
         if (currentProps[key] === nextProps[key]) continue
         if (key === 'key') continue
 
-        const isListener = key.startsWith('on')
+        // Probably faster than calling startsWith...
+        const isListener = key[0] === 'o' && key[1] === 'n'
 
         if (isListener) {
           const eventName = key.substr(2).toLowerCase()
@@ -970,20 +951,194 @@ import { HtmlAttribute } from './html-attributes'
       context.mountStack.add(mountChildren)
     }
 
+    const updateLazyChild = (lazyChild: LazyChild) => () => {
+      const [nextDependencies, result] = context.state[TRACKED_EXECUTE](
+        lazyChild.childFunction
+      )
+
+      context.state[UPDATE_DEPENDENCIES](
+        lazyChild.dependencies,
+        nextDependencies,
+        lazyChild.callback
+      )
+      lazyChild.dependencies.clear()
+      setPool.free(lazyChild.dependencies)
+      lazyChild.dependencies = nextDependencies
+
+      preservedElements = setPool.allocate(currentKeys)
+
+      // TODO: LCS, reuse etc.
+      for (let key; (key = lazyChild.childKeys.pop()) !== undefined; ) {
+        const child = currentChildren.get(key)
+
+        assert(child)
+        preservedElements.delete(key)
+        deadChildren.push(child)
+      }
+
+      const children = flattenChildren([result], lazyChild.key + '.', lazyChild)
+
+      const partialNextKeys: string[] = []
+      for (const [key, child] of children) {
+        partialNextKeys.push(key)
+
+        if (typeof child === 'number' || typeof child === 'string') {
+          const node = document.createTextNode(child as string)
+          currentChildren.set(key, {
+            type: ElementType.TextNode,
+            node,
+          })
+          continue
+        }
+
+        currentChildren.set(key, createElement(child, context))
+      }
+      const startIndex = currentKeys.indexOf(lazyChild.childKeys[0])
+
+      nextKeysArr = Array.from(currentKeys)
+      nextKeysArr.splice(
+        startIndex,
+        lazyChild.childKeys.length,
+        ...partialNextKeys
+      )
+      nextKeys = setPool.allocate(nextKeysArr)
+
+      context.mountStack.add(mountChildren)
+
+      if (!context.currentlyExecutingUpdates) {
+        context.currentlyExecutingUpdates = true
+
+        for (const fn of context.updateStack) {
+          fn()
+          context.updateStack.delete(fn)
+        }
+
+        for (const fn of context.mountStack) {
+          fn()
+          context.mountStack.delete(fn)
+        }
+
+        context.currentlyExecutingUpdates = false
+      }
+    }
+
+    const flattenChildren = (
+      children: Children,
+      prefix = '',
+      lazyChild: LazyChild | null = null
+    ) => {
+      const flattenedChildren = new Map<string, RenderableChild>()
+
+      // TODO: Reuse these across all elements
+      const prefixStack: string[] = [prefix]
+      const childrenStack: Children[] = [children]
+      const indexStack: number[] = [0]
+
+      const lazyChildStack: (LazyChild | null)[] = [lazyChild]
+
+      for (let top = 0; top >= 0; indexStack[top]++) {
+        const i = indexStack[top]
+        const children = childrenStack[top]
+        const keyPrefix = prefixStack[top]
+        const lazyChild = lazyChildStack[top]
+
+        if (i == children.length) {
+          delete prefixStack[top]
+          delete childrenStack[top]
+          delete indexStack[top]
+          delete lazyChildStack[top]
+
+          if (lazyChild) {
+            lazyChildren.push(lazyChild)
+
+            if (lazyChild.callback === noop) {
+              lazyChild.callback = updateLazyChild(lazyChild)
+              const emptySet = setPool.allocate<string>()
+              context.state[UPDATE_DEPENDENCIES](
+                emptySet,
+                lazyChild.dependencies,
+                lazyChild.callback
+              )
+              setPool.free(emptySet)
+            }
+          }
+
+          top--
+          continue
+        }
+
+        const child = children[i]
+
+        if (
+          child === null ||
+          typeof child === 'boolean' ||
+          typeof child === 'undefined'
+        ) {
+          continue
+        }
+
+        if (typeof child === 'string' || typeof child === 'number') {
+          const key = keyPrefix + i
+          flattenedChildren.set(key, child)
+
+          if (lazyChild) {
+            lazyChild.childKeys.push(key)
+          }
+          continue
+        }
+
+        if (typeof child === 'function') {
+          assert(!lazyChild)
+
+          const [dependencies, result] = context.state[TRACKED_EXECUTE](child)
+
+          top++
+          // TODO: Figure out if assigning to `top` index is faster than
+          // push/pop
+          prefixStack[top] = keyPrefix + i + '.'
+          childrenStack[top] = [result]
+          lazyChildStack[top] = {
+            childFunction: child,
+            callback: noop,
+            dependencies,
+            key: keyPrefix + i,
+            childKeys: [],
+          }
+
+          // This needs to start from -1 as it gets incremented once after
+          // the continue statement
+          indexStack[top] = -1
+          continue
+        }
+
+        if (Array.isArray(child)) {
+          top++
+          // TODO: Figure out if assigning to `top` index is faster than
+          // push/pop
+          prefixStack[top] = keyPrefix + i + '.'
+          childrenStack[top] = child
+          lazyChildStack[top] = null
+
+          // This needs to start from -1 as it gets incremented once after
+          // the continue statement
+          indexStack[top] = -1
+          continue
+        }
+        const key =
+          keyPrefix +
+          (typeof child.props.key !== 'undefined' ? '\\' + child.props.key : i)
+        flattenedChildren.set(key, child)
+        if (lazyChild) {
+          lazyChild.childKeys.push(key)
+        }
+      }
+      return flattenedChildren
+    }
+
     const updateChildren = () => {
       assert(nextChildren)
 
       const flattenedChildren = flattenChildren(nextChildren)
-
-      // Reiterate to handle all the function children
-      for (const [key, child] of flattenedChildren) {
-        if (typeof child === 'function') {
-          // TODO: How to not allocate array here? Reuse? Something else?
-          flattenChildren([child()], key + '.', flattenedChildren)
-          flattenedChildren.delete(key)
-          lazyChildren.set(key, child)
-        }
-      }
 
       const nextKeysIterator = flattenedChildren.keys()
       nextKeysArr = Array.from(nextKeysIterator)
@@ -1095,6 +1250,7 @@ import { HtmlAttribute } from './html-attributes'
       setPool.free(preservedElements)
 
       if (__DEBUG__) {
+        // Ensure these are not reused
         nextKeys = null
         nextKeysArr = null
         preservedElements = null

@@ -11,6 +11,17 @@ const getKaiku = () => {
   }
 }
 
+const getStack = () => {
+  try {
+    throw new Error()
+  } catch (err) {
+    return err.stack
+      .split('\n')
+      .map((v) => v.trim())
+      .slice(2)
+  }
+}
+
 const { h, render, createState, useEffect, useState } = getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
@@ -464,6 +475,20 @@ describe('kaiku', () => {
     }
   })
 
+  it('should handle multiple array children in different positions', () => {
+    const App = () => (
+      <div>
+        {[0, 1, 2, 3]}
+        <span>foo</span>
+        {['a', 'b', 'c', 'd']}
+      </div>
+    )
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should handle function expressions as children', async () => {
     const App = () => (
       <div>
@@ -474,6 +499,69 @@ describe('kaiku', () => {
 
     render(<App />, rootNode)
 
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should handle lazy children efficiently', async () => {
+    const componentRenderCounter = jest.fn()
+    const lazyDivCallCounter = jest.fn()
+    const lazySpanCallCounter = jest.fn()
+
+    const state = createState({ div: 0, span: 0 })
+
+    const App = () => {
+      componentRenderCounter()
+
+      return (
+        <div>
+          {() => {
+            // console.log('div', getStack())
+            lazyDivCallCounter()
+            return <div>My counter is at {state.div}</div>
+          }}
+          {() => {
+            //console.log('span', getStack())
+            lazySpanCallCounter()
+            return <span>My counter is at {state.span}</span>
+          }}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+
+    expect(componentRenderCounter).toBeCalledTimes(1)
+    expect(lazySpanCallCounter).toBeCalledTimes(1)
+    expect(lazyDivCallCounter).toBeCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.div++
+    await nextTick()
+    expect(componentRenderCounter).toBeCalledTimes(1)
+    expect(lazySpanCallCounter).toBeCalledTimes(1)
+    expect(lazyDivCallCounter).toBeCalledTimes(2)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.span++
+    await nextTick()
+    expect(componentRenderCounter).toBeCalledTimes(1)
+    expect(lazySpanCallCounter).toBeCalledTimes(2)
+    expect(lazyDivCallCounter).toBeCalledTimes(2)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.span++
+    state.span++
+    state.span++
+    state.span++
+
+    state.div++
+    state.div++
+    state.div++
+    state.div++
+    await nextTick()
+    expect(componentRenderCounter).toBeCalledTimes(1)
+    expect(lazySpanCallCounter).toBeCalledTimes(3)
+    expect(lazyDivCallCounter).toBeCalledTimes(3)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })
