@@ -67,7 +67,13 @@ import { HtmlAttribute } from './html-attributes'
   }
 
   type RenderableChild = ElementDescriptor | string | number
-  type Child = RenderableChild | boolean | null | undefined | Child[]
+  type Child =
+    | RenderableChild
+    | boolean
+    | null
+    | undefined
+    | Child[]
+    | (() => Child)
   type Children = Child[]
   type ComponentPropsBase = { key?: string; children?: Children[] }
   type ComponentFunction<PropsT extends ComponentPropsBase> = (
@@ -733,8 +739,8 @@ import { HtmlAttribute } from './html-attributes'
   const flattenChildren = (
     children: Children,
     keyPrefix: string = '',
-    result: Map<string, RenderableChild> = new Map()
-  ): Map<string, RenderableChild> => {
+    result: Map<string, RenderableChild | (() => Child)> = new Map()
+  ): Map<string, RenderableChild | (() => Child)> => {
     for (let i = 0; i < children.length; i++) {
       const child = children[i]
 
@@ -751,14 +757,18 @@ import { HtmlAttribute } from './html-attributes'
         continue
       }
 
-      if (typeof child === 'string' || typeof child === 'number') {
+      if (
+        typeof child === 'string' ||
+        typeof child === 'number' ||
+        typeof child === 'function'
+      ) {
         result.set(keyPrefix + i, child)
         continue
       }
 
       result.set(
         keyPrefix +
-          (typeof child.props.key !== 'undefined' ? '_' + child.props.key : i),
+          (typeof child.props.key !== 'undefined' ? '\\' + child.props.key : i),
         child
       )
     }
@@ -943,6 +953,16 @@ import { HtmlAttribute } from './html-attributes'
       assert(nextChildren)
 
       const flattenedChildren = flattenChildren(nextChildren)
+
+      // Reiterate to handle all the function children
+      for (const [key, child] of flattenedChildren) {
+        if (typeof child === 'function') {
+          // TODO: How to not allocate array here? Reuse? Something else?
+          flattenChildren([child()], key + '.', flattenedChildren)
+          flattenedChildren.delete(key)
+        }
+      }
+
       const nextKeysIterator = flattenedChildren.keys()
       nextKeysArr = Array.from(nextKeysIterator)
       nextKeys = setPool.allocate(nextKeysArr)
@@ -957,6 +977,7 @@ import { HtmlAttribute } from './html-attributes'
         const prevChild = currentChildren.get(key)
 
         assert(typeof nextChild !== 'undefined')
+        assert(typeof nextChild !== 'function')
         assert(prevChild)
 
         const wasReused = reuseChildElement(prevChild, nextChild)
@@ -978,6 +999,7 @@ import { HtmlAttribute } from './html-attributes'
         const prevChild = currentChildren.get(key)
 
         assert(typeof nextChild !== 'undefined')
+        assert(typeof nextChild !== 'function')
 
         const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
 
@@ -1056,6 +1078,8 @@ import { HtmlAttribute } from './html-attributes'
         preservedElements = null
       }
     }
+
+    const updateLazyChild = () => {}
 
     const destroy = () => {
       for (let unregister; (unregister = lazyUpdates.pop()); ) {

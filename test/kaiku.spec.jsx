@@ -451,9 +451,7 @@ describe('kaiku', () => {
   it('should handle changing child type', async () => {
     const state = createState({ a: true })
 
-    const App = () => {
-      return <div id="app">{state.a ? 'text' : <b>bold text</b>}</div>
-    }
+    const App = () => <div id="app">{state.a ? 'text' : <b>bold text</b>}</div>
 
     render(<App />, rootNode, state)
 
@@ -464,5 +462,18 @@ describe('kaiku', () => {
         state.a ? 'text' : '<b>bold text</b>'
       )
     }
+  })
+
+  it('should handle function expressions as children', async () => {
+    const App = () => (
+      <div>
+        {() => 'Hello '}
+        {() => <span>world!</span>}
+      </div>
+    )
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })
