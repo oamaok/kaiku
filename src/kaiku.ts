@@ -90,7 +90,7 @@ import { HtmlAttribute } from './html-attributes'
     | null
     | undefined
     | Child[]
-    | (() => Child)
+    | ComponentFunction<{}>
   type Children = Child[]
   type ComponentPropsBase = { key?: string; children_?: Children[] }
   type ComponentFunction<PropsT extends ComponentPropsBase> = (
@@ -804,18 +804,9 @@ import { HtmlAttribute } from './html-attributes'
     dependencies: Set<string>
   }
 
-  type LazyChild = {
-    childFunction: () => Child
-    callback: () => void
-    dependencies: Set<string>
-    key: string
-    childKeys: string[]
-  }
-
   const reusedPrefixStack: string[] = []
   const reusedChildrenStack: Children[] = []
   const reusedIndexStack: number[] = []
-  const reusedLazyChildStack: (LazyChild | null)[] = []
 
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
@@ -834,7 +825,6 @@ import { HtmlAttribute } from './html-attributes'
     let preservedElements: Set<string> | null = null
 
     let lazyUpdates: LazyUpdate[] = []
-    let lazyChildren: LazyChild[] = []
 
     const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
       if (typeof prop !== 'function') {
@@ -880,15 +870,6 @@ import { HtmlAttribute } from './html-attributes'
         )
         lazyUpdate.dependencies.clear()
         setPool.free(lazyUpdate.dependencies)
-      }
-
-      for (let lazyChild; (lazyChild = lazyChildren.pop()); ) {
-        context.state_[REMOVE_DEPENDENCIES](
-          lazyChild.dependencies,
-          lazyChild.callback
-        )
-        lazyChild.dependencies.clear()
-        setPool.free(lazyChild.dependencies)
       }
     }
 
@@ -976,145 +957,28 @@ import { HtmlAttribute } from './html-attributes'
       context.queueMount(mountChildren)
     }
 
-    const updateLazyChild = (lazyChild: LazyChild) => () => {
-      const [nextDependencies, result] = context.state_[TRACKED_EXECUTE](
-        lazyChild.childFunction
-      )
-
-      context.state_[UPDATE_DEPENDENCIES](
-        lazyChild.dependencies,
-        nextDependencies,
-        lazyChild.callback
-      )
-      lazyChild.dependencies.clear()
-      setPool.free(lazyChild.dependencies)
-      lazyChild.dependencies = nextDependencies
-
-      preservedElements = setPool.allocate(currentKeys)
-
-      const prevKeys = lazyChild.childKeys
-      lazyChild.childKeys = []
-
-      const children = flattenChildren([result], lazyChild.key + '.', lazyChild)
-
-      const lcsOfKeys = longestCommonSubsequence(prevKeys, lazyChild.childKeys)
-
-      console.log({ prevKeys, lcsOfKeys, preservedElements })
-      for (const key of prevKeys) {
-        if (!children.has(key)) {
-          preservedElements.delete(key)
-        }
-      }
-
-      for (const key of lcsOfKeys) {
-        const nextChild = children.get(key)
-        const prevChild = currentChildren.get(key)
-
-        assert(typeof nextChild !== 'undefined')
-        assert(prevChild)
-
-        const wasReused = reuseChildElement(prevChild, nextChild)
-
-        if (!wasReused) {
-          // Let's not mark the child as dead yet.
-          // It might be reused in the next loop.
-          preservedElements.delete(key)
-        }
-      }
-
-
-      for (const [key, nextChild] of children) {
-        if (preservedElements.has(key)) continue
-
-        const prevChild = currentChildren.get(key)
-
-        const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
-
-        if (!wasReused) {
-          if (prevChild) {
-            deadChildren.push(prevChild)
-          }
-
-          if (typeof nextChild === 'number' || typeof nextChild === 'string') {
-            const node = document.createTextNode(nextChild as string)
-            currentChildren.set(key, {
-              type_: ElementType.TextNode,
-              node,
-            })
-            continue
-          }
-
-          currentChildren.set(key, createElement(nextChild, context))
-        }
-      }
-
-      const startIndex = currentKeys.indexOf(lazyChild.childKeys[0])
-
-      nextKeysArr = Array.from(currentKeys)
-      nextKeysArr.splice(
-        startIndex,
-        lazyChild.childKeys.length,
-        ...lazyChild.childKeys
-      )
-      nextKeys = setPool.allocate(nextKeysArr)
-
-      // Check which children will not be a part of the next render.
-      // Mark them for destruction and remove from currentChildren.
-      for (const [key, child] of currentChildren) {
-        if (!nextKeys.has(key)) {
-          deadChildren.push(child)
-          currentChildren.delete(key)
-        }
-      }
-
-      context.queueMount(mountChildren)
-    }
-
-    const flattenChildren = (
-      children: Children,
-      prefix = '',
-      lazyChild: LazyChild | null = null
-    ) => {
+    const flattenChildren = (children: Children, prefix = '') => {
       const flattenedChildren = new Map<string, RenderableChild>()
 
       if (__DEBUG__) {
         assert(reusedPrefixStack.length === 0)
         assert(reusedChildrenStack.length === 0)
         assert(reusedIndexStack.length === 0)
-        assert(reusedLazyChildStack.length === 0)
       }
 
       reusedPrefixStack.push(prefix)
       reusedChildrenStack.push(children)
       reusedIndexStack.push(0)
-      reusedLazyChildStack.push(lazyChild)
 
       for (let top = 0; top >= 0; reusedIndexStack[top]++) {
         const i = reusedIndexStack[top]
         const children = reusedChildrenStack[top]
         const keyPrefix = reusedPrefixStack[top]
-        const lazyChild = reusedLazyChildStack[top]
 
         if (i == children.length) {
           reusedPrefixStack.pop()
           reusedChildrenStack.pop()
           reusedIndexStack.pop()
-          reusedLazyChildStack.pop()
-
-          if (lazyChild) {
-            lazyChildren.push(lazyChild)
-
-            if (lazyChild.callback === noop) {
-              lazyChild.callback = updateLazyChild(lazyChild)
-              const emptySet = setPool.allocate<string>()
-              context.state_[UPDATE_DEPENDENCIES](
-                emptySet,
-                lazyChild.dependencies,
-                lazyChild.callback
-              )
-              setPool.free(emptySet)
-            }
-          }
 
           top--
           continue
@@ -1133,32 +997,12 @@ import { HtmlAttribute } from './html-attributes'
         if (typeof child === 'string' || typeof child === 'number') {
           const key = keyPrefix + i
           flattenedChildren.set(key, child)
-
-          if (lazyChild) {
-            lazyChild.childKeys.push(key)
-          }
           continue
         }
 
         if (typeof child === 'function') {
-          assert(!lazyChild)
-
-          const [dependencies, result] = context.state_[TRACKED_EXECUTE](child)
-
-          top++
-          reusedPrefixStack.push(keyPrefix + i + '.')
-          reusedChildrenStack.push([result])
-          reusedLazyChildStack.push({
-            childFunction: child,
-            callback: noop,
-            dependencies,
-            key: keyPrefix + i,
-            childKeys: [],
-          })
-
-          // This needs to start from -1 as it gets incremented once after
-          // the continue statement
-          reusedIndexStack.push(-1)
+          const key = keyPrefix + i
+          flattenedChildren.set(key, h(child, null))
           continue
         }
 
@@ -1166,7 +1010,6 @@ import { HtmlAttribute } from './html-attributes'
           top++
           reusedPrefixStack.push(keyPrefix + i + '.')
           reusedChildrenStack.push(child)
-          reusedLazyChildStack.push(lazyChild)
 
           // This needs to start from -1 as it gets incremented once after
           // the continue statement
@@ -1177,16 +1020,12 @@ import { HtmlAttribute } from './html-attributes'
           keyPrefix +
           (typeof child.props.key !== 'undefined' ? '\\' + child.props.key : i)
         flattenedChildren.set(key, child)
-        if (lazyChild) {
-          lazyChild.childKeys.push(key)
-        }
       }
 
       if (__DEBUG__) {
         assert(reusedPrefixStack.length === 0)
         assert(reusedChildrenStack.length === 0)
         assert(reusedIndexStack.length === 0)
-        assert(reusedLazyChildStack.length === 0)
       }
 
       return flattenedChildren

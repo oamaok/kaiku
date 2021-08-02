@@ -287,7 +287,7 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it.only('should handle updates in an array within a lazy child efficiently', async () => {
+  it('should handle updates in an array within a lazy child efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
 
@@ -310,11 +310,15 @@ describe('kaiku', () => {
       listRenderCounter()
       return (
         <div>
-          {() =>
-            state.list
-              .filter((item) => item.condition)
-              .map((item) => <Item key={item.key} item={item} />)
-          }
+          {() => (
+            <div>
+              {state.list
+                .filter((item) => item.condition)
+                .map((item) => (
+                  <Item key={item.key} item={item} />
+                ))}
+            </div>
+          )}
         </div>
       )
     }
@@ -564,7 +568,7 @@ describe('kaiku', () => {
   it('should handle function expressions as children', async () => {
     const App = () => (
       <div>
-        {() => 'Hello '}
+        {() => <span>Hello</span>}
         {() => <span>world!</span>}
       </div>
     )

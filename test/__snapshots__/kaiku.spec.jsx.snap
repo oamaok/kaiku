@@ -4,7 +4,7 @@ exports[`kaiku should handle changing rootNode.firstChild 1`] = `"<div>Hello, I 
 
 exports[`kaiku should handle changing rootNode.firstChild 2`] = `"<span>Hello, I am a span tag!</span>"`;
 
-exports[`kaiku should handle function expressions as children 1`] = `"<div>Hello <span>world!</span></div>"`;
+exports[`kaiku should handle function expressions as children 1`] = `"<div><span>Hello</span><span>world!</span></div>"`;
 
 exports[`kaiku should handle lazy children efficiently 1`] = `"<div><div>My counter is at 0</div><span>My counter is at 0</span></div>"`;
 
@@ -28,17 +28,17 @@ exports[`kaiku should handle updates in an array efficiently 5`] = `"<div><div>H
 
 exports[`kaiku should handle updates in an array efficiently 6`] = `"<div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 1`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 1`] = `"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 2`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 2`] = `"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 3`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 3`] = `"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 4`] = `"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div><div>Hello, I am item number 5</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 4`] = `"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div><div>Hello, I am item number 5</div></div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 5`] = `"<div><div>Hello, I am item number 4</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 5`] = `"<div><div><div>Hello, I am item number 4</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div></div>"`;
 
-exports[`kaiku should handle updates in an array within a lazy child efficiently 6`] = `"<div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"`;
+exports[`kaiku should handle updates in an array within a lazy child efficiently 6`] = `"<div><div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div></div>"`;
 
 exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<div>I am the final child!</div>"`;
 
