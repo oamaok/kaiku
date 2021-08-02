@@ -1221,12 +1221,8 @@ import { HtmlAttribute } from './html-attributes'
   const render = <PropsT, StateT = object>(
     rootDescriptor: ElementDescriptor<PropsT>,
     rootElement: HTMLElement,
-    state?: State<StateT>
+    state: State<StateT> = createState({}) as State<StateT>
   ) => {
-    if (!state) {
-      state = createState({}) as State<StateT>
-    }
-
     let currentlyExecutingUpdates = false
     const updates = new Set<() => void>()
     const mounts = new Set<() => void>()
