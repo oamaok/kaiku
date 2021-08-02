@@ -287,6 +287,78 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it.only('should handle updates in an array within a lazy child efficiently', async () => {
+    const listRenderCounter = jest.fn()
+    const itemRenderCounter = jest.fn()
+
+    const state = createState({
+      list: Array(10)
+        .fill()
+        .map((_, i) => ({
+          key: i,
+          name: 'Hello, I am item number ' + i,
+          condition: i < 5,
+        })),
+    })
+
+    const Item = ({ item }) => {
+      itemRenderCounter(item)
+      return <div>{item.name}</div>
+    }
+
+    const List = () => {
+      listRenderCounter()
+      return (
+        <div>
+          {() =>
+            state.list
+              .filter((item) => item.condition)
+              .map((item) => <Item key={item.key} item={item} />)
+          }
+        </div>
+      )
+    }
+
+    render(<List />, rootNode, state)
+
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.list[9].name = 'My name just changed'
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(5)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.list[2].name = "I'm changing my name aswell!"
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(6)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.list[5].condition = true
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    const item = state.list[0]
+    state.list[0] = state.list[4]
+    state.list[4] = item
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.list[0].condition = false
+    state.list[1].condition = false
+    await nextTick()
+    expect(listRenderCounter).toHaveBeenCalledTimes(1)
+    expect(itemRenderCounter).toHaveBeenCalledTimes(7)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should update lazy props efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
