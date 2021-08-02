@@ -669,14 +669,15 @@ import { HtmlAttribute } from './html-attributes'
       return names
     }
 
+    let className = ''
+
     if (Array.isArray(names)) {
-      return names
-        .map((name) => stringifyClassNames(name))
-        .join(' ')
-        .trim()
+      for (const name of names) {
+        className += stringifyClassNames(name) + ' '
+      }
+      return className.trim()
     }
 
-    let className = ''
     const keys = Object.keys(names)
     for (const key of keys) {
       if (names[key]) className += key + ' '
@@ -686,12 +687,30 @@ import { HtmlAttribute } from './html-attributes'
 
   // TODO: Add special cases for short arrays
   const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
-    const C: number[] = Array(a.length * b.length).fill(0)
+    const aLength = a.length
+    const bLength = b.length
 
-    const ix = (i: number, j: number) => i * b.length + j
+    if (aLength === 0 || bLength === 0) {
+      return []
+    }
 
-    for (let i = 0; i < a.length; i++) {
-      for (let j = 0; j < b.length; j++) {
+    if (aLength === 1 || bLength === 1) {
+      const smaller = aLength === 1 ? a : b
+      const bigger = aLength === 1 ? b : a
+
+      for (let i = 0; i < bigger.length; i++) {
+        if (bigger[i] === smaller[0]) return smaller
+      }
+
+      return []
+    }
+
+    const C: number[] = Array((aLength + 1) * (bLength + 1)).fill(0)
+
+    const ix = (i: number, j: number) => i * bLength + j
+
+    for (let i = 0; i < aLength; i++) {
+      for (let j = 0; j < bLength; j++) {
         if (a[i] === b[j]) {
           C[ix(i + 1, j + 1)] = C[ix(i, j)] + 1
         } else {
@@ -702,8 +721,8 @@ import { HtmlAttribute } from './html-attributes'
 
     const res: T[] = []
 
-    let i = a.length
-    let j = b.length
+    let i = aLength
+    let j = bLength
 
     while (i && j) {
       if (a[i - 1] === b[j - 1]) {
