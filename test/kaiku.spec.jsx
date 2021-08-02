@@ -515,12 +515,10 @@ describe('kaiku', () => {
       return (
         <div>
           {() => {
-            // console.log('div', getStack())
             lazyDivCallCounter()
             return <div>My counter is at {state.div}</div>
           }}
           {() => {
-            //console.log('span', getStack())
             lazySpanCallCounter()
             return <span>My counter is at {state.span}</span>
           }}

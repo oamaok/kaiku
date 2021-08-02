@@ -63,9 +63,8 @@ import { HtmlAttribute } from './html-attributes'
 
   type KaikuContext<StateT> = {
     state: State<StateT>
-    updateStack: Set<() => void>
-    mountStack: Set<() => void>
-    currentlyExecutingUpdates: boolean
+    queueUpdate: (fn: () => void) => void
+    queueMount: (fn: () => void) => void
   }
   type RenderableChild = ElementDescriptor | string | number
   type Child =
@@ -590,23 +589,7 @@ import { HtmlAttribute } from './html-attributes'
       dependencies = nextDependencies
       currentProps = nextProps
 
-      context.updateStack.add(updateLeaf)
-
-      if (!context.currentlyExecutingUpdates) {
-        context.currentlyExecutingUpdates = true
-
-        for (const fn of context.updateStack) {
-          fn()
-          context.updateStack.delete(fn)
-        }
-
-        for (const fn of context.mountStack) {
-          fn()
-          context.mountStack.delete(fn)
-        }
-
-        context.currentlyExecutingUpdates = false
-      }
+      context.queueUpdate(updateLeaf)
     }
 
     const updateLeaf = () => {
@@ -792,6 +775,11 @@ import { HtmlAttribute } from './html-attributes'
     childKeys: string[]
   }
 
+  const reusedPrefixStack: string[] = []
+  const reusedChildrenStack: Children[] = []
+  const reusedIndexStack: number[] = []
+  const reusedLazyChildStack: (LazyChild | null)[] = []
+
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
@@ -947,8 +935,8 @@ import { HtmlAttribute } from './html-attributes'
       currentProps = nextProps
       nextChildren = children
 
-      context.updateStack.add(updateChildren)
-      context.mountStack.add(mountChildren)
+      context.queueUpdate(updateChildren)
+      context.queueMount(mountChildren)
     }
 
     const updateLazyChild = (lazyChild: LazyChild) => () => {
@@ -1003,23 +991,7 @@ import { HtmlAttribute } from './html-attributes'
       )
       nextKeys = setPool.allocate(nextKeysArr)
 
-      context.mountStack.add(mountChildren)
-
-      if (!context.currentlyExecutingUpdates) {
-        context.currentlyExecutingUpdates = true
-
-        for (const fn of context.updateStack) {
-          fn()
-          context.updateStack.delete(fn)
-        }
-
-        for (const fn of context.mountStack) {
-          fn()
-          context.mountStack.delete(fn)
-        }
-
-        context.currentlyExecutingUpdates = false
-      }
+      context.queueMount(mountChildren)
     }
 
     const flattenChildren = (
@@ -1029,24 +1001,27 @@ import { HtmlAttribute } from './html-attributes'
     ) => {
       const flattenedChildren = new Map<string, RenderableChild>()
 
-      // TODO: Reuse these across all elements
-      const prefixStack: string[] = [prefix]
-      const childrenStack: Children[] = [children]
-      const indexStack: number[] = [0]
+      assert(reusedPrefixStack.length === 0)
+      assert(reusedChildrenStack.length === 0)
+      assert(reusedIndexStack.length === 0)
+      assert(reusedLazyChildStack.length === 0)
 
-      const lazyChildStack: (LazyChild | null)[] = [lazyChild]
+      reusedPrefixStack.push(prefix)
+      reusedChildrenStack.push(children)
+      reusedIndexStack.push(0)
+      reusedLazyChildStack.push(lazyChild)
 
-      for (let top = 0; top >= 0; indexStack[top]++) {
-        const i = indexStack[top]
-        const children = childrenStack[top]
-        const keyPrefix = prefixStack[top]
-        const lazyChild = lazyChildStack[top]
+      for (let top = 0; top >= 0; reusedIndexStack[top]++) {
+        const i = reusedIndexStack[top]
+        const children = reusedChildrenStack[top]
+        const keyPrefix = reusedPrefixStack[top]
+        const lazyChild = reusedLazyChildStack[top]
 
         if (i == children.length) {
-          delete prefixStack[top]
-          delete childrenStack[top]
-          delete indexStack[top]
-          delete lazyChildStack[top]
+          reusedPrefixStack.pop()
+          reusedChildrenStack.pop()
+          reusedIndexStack.pop()
+          reusedLazyChildStack.pop()
 
           if (lazyChild) {
             lazyChildren.push(lazyChild)
@@ -1093,35 +1068,31 @@ import { HtmlAttribute } from './html-attributes'
           const [dependencies, result] = context.state[TRACKED_EXECUTE](child)
 
           top++
-          // TODO: Figure out if assigning to `top` index is faster than
-          // push/pop
-          prefixStack[top] = keyPrefix + i + '.'
-          childrenStack[top] = [result]
-          lazyChildStack[top] = {
+          reusedPrefixStack.push(keyPrefix + i + '.')
+          reusedChildrenStack.push([result])
+          reusedLazyChildStack.push({
             childFunction: child,
             callback: noop,
             dependencies,
             key: keyPrefix + i,
             childKeys: [],
-          }
+          })
 
           // This needs to start from -1 as it gets incremented once after
           // the continue statement
-          indexStack[top] = -1
+          reusedIndexStack.push(-1)
           continue
         }
 
         if (Array.isArray(child)) {
           top++
-          // TODO: Figure out if assigning to `top` index is faster than
-          // push/pop
-          prefixStack[top] = keyPrefix + i + '.'
-          childrenStack[top] = child
-          lazyChildStack[top] = null
+          reusedPrefixStack.push(keyPrefix + i + '.')
+          reusedChildrenStack.push(child)
+          reusedLazyChildStack.push(null)
 
           // This needs to start from -1 as it gets incremented once after
           // the continue statement
-          indexStack[top] = -1
+          reusedIndexStack.push(-1)
           continue
         }
         const key =
@@ -1132,6 +1103,12 @@ import { HtmlAttribute } from './html-attributes'
           lazyChild.childKeys.push(key)
         }
       }
+
+      assert(reusedPrefixStack.length === 0)
+      assert(reusedChildrenStack.length === 0)
+      assert(reusedIndexStack.length === 0)
+      assert(reusedLazyChildStack.length === 0)
+
       return flattenedChildren
     }
 
@@ -1333,16 +1310,42 @@ import { HtmlAttribute } from './html-attributes'
       state = createState({}) as State<StateT>
     }
 
-    createElement<PropsT, StateT>(
-      rootDescriptor,
-      {
-        state,
-        updateStack: new Set(),
-        mountStack: new Set(),
-        currentlyExecutingUpdates: false,
+    let currentlyExecutingUpdates = false
+    const updates = new Set<() => void>()
+    const mounts = new Set<() => void>()
+
+    const executeUpdatesAndMounts = () => {
+      if (currentlyExecutingUpdates) {
+        return
+      }
+      currentlyExecutingUpdates = true
+
+      for (const fn of updates) {
+        fn()
+        updates.delete(fn)
+      }
+
+      for (const fn of mounts) {
+        fn()
+        mounts.delete(fn)
+      }
+
+      currentlyExecutingUpdates = false
+    }
+
+    const context: KaikuContext<StateT> = {
+      state,
+      queueUpdate(fn) {
+        updates.add(fn)
+        executeUpdatesAndMounts()
       },
-      rootElement
-    )
+      queueMount(fn) {
+        mounts.add(fn)
+        executeUpdatesAndMounts()
+      },
+    }
+
+    createElement<PropsT, StateT>(rootDescriptor, context, rootElement)
   }
 
   const kaiku = {
