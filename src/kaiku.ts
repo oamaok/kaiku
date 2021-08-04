@@ -54,6 +54,7 @@ import { HtmlAttribute } from './html-attributes'
   const UPDATE_DEPENDENCIES = Symbol()
   const GET_LOCAL_STATE = Symbol()
   const DELETE_LOCAL_STATE = Symbol()
+  const IMMUTABLE_FLAG = Symbol()
 
   type State<T> = T & {
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
@@ -408,18 +409,18 @@ import { HtmlAttribute } from './html-attributes'
             return true
           }
 
-          const dependencyKey = id + '.' + key
-
           if (
             value !== null &&
             typeof value === 'object' &&
-            value[IS_WRAPPED] !== true
+            value[IS_WRAPPED] !== true &&
+            !value[IMMUTABLE_FLAG]
           ) {
             target[key] = wrap(value)
           } else {
             target[key] = value
           }
 
+          const dependencyKey = id + '.' + key
           const callbacks = dependencyMap.get(dependencyKey)
           if (callbacks) {
             if (!deferredUpdateQueued) {
@@ -448,6 +449,20 @@ import { HtmlAttribute } from './html-attributes'
     const state = wrap(initialState)
 
     return state as State<StateT>
+  }
+
+  const immutable = <T extends object>(obj: T) => {
+    return new Proxy(obj, {
+      get(target, _key) {
+        const key = _key as keyof T
+
+        if (key === IMMUTABLE_FLAG) {
+          return true
+        }
+
+        return target[key]
+      },
+    })
   }
 
   // Hooks and their internal state
@@ -886,6 +901,7 @@ import { HtmlAttribute } from './html-attributes'
       destroyLazyUpdates()
 
       for (const key of keys) {
+        // TODO: Special case access to style and classsnames
         if (currentProps[key] === nextProps[key]) continue
         if (key === 'key') continue
 
@@ -1273,6 +1289,7 @@ import { HtmlAttribute } from './html-attributes'
     createState,
     useEffect,
     useState,
+    immutable,
   }
 
   if (typeof module !== 'undefined') {
