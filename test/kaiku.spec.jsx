@@ -34,6 +34,10 @@ beforeEach(() => {
 })
 
 describe('kaiku', () => {
+  it('should handle state with null values', () => {
+    const state = createState({ foo: null })
+  })
+
   it('should render a span to body', async () => {
     const state = createState({})
 

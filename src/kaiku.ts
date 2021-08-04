@@ -410,7 +410,11 @@ import { HtmlAttribute } from './html-attributes'
 
           const dependencyKey = id + '.' + key
 
-          if (typeof value === 'object' && value[IS_WRAPPED] !== true) {
+          if (
+            value !== null &&
+            typeof value === 'object' &&
+            value[IS_WRAPPED] !== true
+          ) {
             target[key] = wrap(value)
           } else {
             target[key] = value
@@ -1018,7 +1022,9 @@ import { HtmlAttribute } from './html-attributes'
         }
         const key =
           keyPrefix +
-          (typeof child.props.key !== 'undefined' ? '\\' + child.props.key : i)
+          (typeof child.props.key !== 'undefined'
+            ? '\u9375' + child.props.key
+            : i)
         flattenedChildren.set(key, child)
       }
 
