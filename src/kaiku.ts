@@ -413,7 +413,7 @@ import { HtmlAttribute } from './html-attributes'
             value !== null &&
             typeof value === 'object' &&
             value[IS_WRAPPED] !== true &&
-            !value[IMMUTABLE_FLAG]
+            !(value[IMMUTABLE_FLAG] as boolean)
           ) {
             target[key] = wrap(value)
           } else {
