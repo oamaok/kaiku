@@ -643,24 +643,61 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it('should handle basic refs', async () => {
-    const effectCall = jest.fn()
+  it('should handle refs and related effect calls', async () => {
+    const firstEffectCall = jest.fn()
+    const secondEffectCall = jest.fn()
+    const thirdEffectCall = jest.fn()
+
+    const state = createState({ value: 'second' })
 
     const App = () => {
-      const ref = useRef()
+      const firstRef = useRef()
+      const secondRef = useRef()
 
       useEffect(() => {
-        effectCall(ref.current?.innerHTML)
+        firstEffectCall(firstRef.current?.innerHTML)
       })
 
-      return <div ref={ref}>Hello world!</div>
+      useEffect(() => {
+        secondEffectCall(secondRef.current?.innerHTML)
+      })
+
+      useEffect(() => {
+        thirdEffectCall(
+          firstRef.current?.innerHTML,
+          secondRef.current?.innerHTML
+        )
+      })
+
+      return (
+        <div>
+          <div ref={firstRef}>first</div>
+          <div ref={secondRef}>{state.value}</div>
+        </div>
+      )
     }
 
-    render(<App />, rootNode)
+    render(<App />, rootNode, state)
     await nextTick()
 
-    expect(effectCall).toHaveBeenCalledTimes(2)
-    expect(effectCall).toHaveBeenNthCalledWith(1, undefined)
-    expect(effectCall).toHaveBeenNthCalledWith(2, 'Hello world!')
+    expect(firstEffectCall).toHaveBeenCalledTimes(2)
+    expect(firstEffectCall).toHaveBeenNthCalledWith(1, undefined)
+    expect(firstEffectCall).toHaveBeenNthCalledWith(2, 'first')
+
+    expect(secondEffectCall).toHaveBeenCalledTimes(2)
+    expect(secondEffectCall).toHaveBeenNthCalledWith(1, undefined)
+    expect(secondEffectCall).toHaveBeenNthCalledWith(2, 'second')
+
+    expect(thirdEffectCall).toHaveBeenCalledTimes(2)
+    expect(thirdEffectCall).toHaveBeenNthCalledWith(1, undefined, undefined)
+    expect(thirdEffectCall).toHaveBeenNthCalledWith(2, 'first', 'second')
+
+    // Changes into the element contents shouldn't trigger ref changes
+    state.value = 'I changed!'
+    await nextTick()
+
+    expect(firstEffectCall).toHaveBeenCalledTimes(2)
+    expect(secondEffectCall).toHaveBeenCalledTimes(2)
+    expect(thirdEffectCall).toHaveBeenCalledTimes(2)
   })
 })
