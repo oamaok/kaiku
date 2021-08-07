@@ -22,7 +22,7 @@ const getStack = () => {
   }
 }
 
-const { h, render, createState, useEffect, useState } = getKaiku()
+const { h, render, createState, useEffect, useState, useRef } = getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -641,5 +641,26 @@ describe('kaiku', () => {
     expect(lazySpanCallCounter).toBeCalledTimes(3)
     expect(lazyDivCallCounter).toBeCalledTimes(3)
     expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should handle basic refs', async () => {
+    const effectCall = jest.fn()
+
+    const App = () => {
+      const ref = useRef()
+
+      useEffect(() => {
+        effectCall(ref.current?.innerHTML)
+      })
+
+      return <div ref={ref}>Hello world!</div>
+    }
+
+    render(<App />, rootNode)
+    await nextTick()
+
+    expect(effectCall).toHaveBeenCalledTimes(2)
+    expect(effectCall).toHaveBeenNthCalledWith(1, undefined)
+    expect(effectCall).toHaveBeenNthCalledWith(2, 'Hello world!')
   })
 })

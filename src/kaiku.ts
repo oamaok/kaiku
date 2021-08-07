@@ -45,8 +45,6 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
-  const noop = () => undefined
-
   const assert: typeof __assert = __DEBUG__ ? __assert : () => undefined
 
   const TRACKED_EXECUTE = Symbol()
@@ -55,6 +53,7 @@ import { HtmlAttribute } from './html-attributes'
   const GET_LOCAL_STATE = Symbol()
   const DELETE_LOCAL_STATE = Symbol()
   const IMMUTABLE_FLAG = Symbol()
+  const CREATE_REF = Symbol()
 
   type State<T> = T & {
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
@@ -75,6 +74,7 @@ import { HtmlAttribute } from './html-attributes'
       state: T
     ) => State<T>
     [DELETE_LOCAL_STATE]: (componentId: number) => void
+    [CREATE_REF]: <T>(initialValue?: T) => State<Ref<T>>
   }
 
   type KaikuContext<StateT> = {
@@ -101,6 +101,7 @@ import { HtmlAttribute } from './html-attributes'
   type LazyProperty<T> = T | (() => T)
 
   type KaikuHtmlTagProps = {
+    ref: Ref<any>
     key: string
     style: Partial<Record<CssProperty, LazyProperty<string>>>
     className: LazyProperty<ClassNames>
@@ -313,6 +314,10 @@ import { HtmlAttribute } from './html-attributes'
       }
     }
 
+    const createRef = <T>(initialValue: T): Ref<T> => {
+      return wrap({ current: initialValue })
+    }
+
     const updateDependencies = (
       prevDependencies: Set<string>,
       nextDependencies: Set<string>,
@@ -368,6 +373,7 @@ import { HtmlAttribute } from './html-attributes'
       [UPDATE_DEPENDENCIES]: updateDependencies,
       [GET_LOCAL_STATE]: getLocalState,
       [DELETE_LOCAL_STATE]: deleteLocalState,
+      [CREATE_REF]: createRef,
     }
 
     const wrap = <T extends object>(obj: T) => {
@@ -465,11 +471,19 @@ import { HtmlAttribute } from './html-attributes'
     })
   }
 
+  type Ref<T> = {
+    current?: T
+  }
+
+  type ComponentId = number & { __componentId: true }
+
   // Hooks and their internal state
-  const effects = new Map<number, Effect[]>()
-  const componentIdStack: number[] = []
+  const effects = new Map<ComponentId, Effect[]>()
+  const refs = new Map<ComponentId, Ref<any>[]>()
+  const componentIdStack: ComponentId[] = []
   const stateStack: State<object>[] = []
-  const componentsThatHaveUpdatedAtLeastOnce = new Set<number>()
+  const refIndexStack: number[] = []
+  const componentsThatHaveUpdatedAtLeastOnce = new Set<ComponentId>()
 
   type Effect = {
     state_: State<object>
@@ -477,22 +491,31 @@ import { HtmlAttribute } from './html-attributes'
     callback: () => void
   }
 
-  const startHookTracking = (componentId: number, state: State<any>) => {
+  const startHookTracking = (componentId: ComponentId, state: State<any>) => {
     stateStack.push(state)
     componentIdStack.push(componentId)
+    refIndexStack.push(0)
   }
 
   const stopHookTracking = () => {
     const state = stateStack.pop()
     assert(state)
 
+    const refIndex = refIndexStack.pop()
+    assert(typeof refIndex !== 'undefined')
+
     const componentId = componentIdStack.pop()
     assert(typeof componentId !== 'undefined')
     componentsThatHaveUpdatedAtLeastOnce.add(componentId)
   }
 
-  const destroyHooks = (componentId: number) => {
+  const destroyHooks = (componentId: ComponentId) => {
     componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
+
+    // NOTE: Local state allocated by the `useState` hook is released
+    // inside the element `destroy` function.
+
+    refs.delete(componentId)
 
     const componentEffects = effects.get(componentId)
     if (!componentEffects) return
@@ -553,8 +576,34 @@ import { HtmlAttribute } from './html-attributes'
     return state[GET_LOCAL_STATE](componentId, initialState)
   }
 
+  const useRef = <T>(initialValue?: T): Ref<T> => {
+    const componentId = componentIdStack[componentIdStack.length - 1]
+    const refIndex = refIndexStack[refIndexStack.length - 1]++
+    const state = stateStack[stateStack.length - 1] as State<object> | undefined
+
+    assert(state)
+    assert(typeof componentId !== 'undefined')
+
+    let componentRefs = refs.get(componentId)
+
+    if (!componentRefs) {
+      componentRefs = []
+      refs.set(componentId, componentRefs)
+    }
+
+    if (componentRefs.length > refIndex) {
+      return componentRefs[refIndex]
+    }
+
+    const ref: Ref<T> = state[CREATE_REF](initialValue)
+
+    componentRefs.push(ref)
+
+    return ref
+  }
+
   // Components and HTML rendering
-  let nextComponentId = 0
+  let nextComponentId: ComponentId = 0 as ComponentId
 
   const createComponentDescriptor = <PropsT>(
     component: ComponentFunction<PropsT>,
@@ -574,7 +623,7 @@ import { HtmlAttribute } from './html-attributes'
     context: KaikuContext<StateT>,
     rootElement?: HTMLElement
   ): Component<PropsT> => {
-    const id = ++nextComponentId
+    const id: ComponentId = ++nextComponentId as ComponentId
 
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
@@ -904,6 +953,11 @@ import { HtmlAttribute } from './html-attributes'
         // TODO: Special case access to style and classsnames
         if (currentProps[key] === nextProps[key]) continue
         if (key === 'key') continue
+
+        if (key === 'ref') {
+          nextProps[key]!.current = element
+          continue
+        }
 
         // Probably faster than calling startsWith...
         const isListener = key[0] === 'o' && key[1] === 'n'
@@ -1289,6 +1343,7 @@ import { HtmlAttribute } from './html-attributes'
     createState,
     useEffect,
     useState,
+    useRef,
     immutable,
   }
 
