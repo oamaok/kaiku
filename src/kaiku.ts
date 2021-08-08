@@ -375,7 +375,13 @@ import { HtmlAttribute } from './html-attributes'
             )
           }
 
-          return target[key as keyof T]
+          const value = target[key as keyof T]
+
+          if (!isArray && typeof value === 'function') {
+            return value.bind(target)
+          }
+
+          return value
         },
 
         set(target, _key, value) {
