@@ -59,14 +59,14 @@ import { HtmlAttribute } from './html-attributes'
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
       fn: F,
       ...args: Parameters<F>
-    ) => [Set<string>, ReturnType<F>]
+    ) => [Set<StateKey>, ReturnType<F>]
     [REMOVE_DEPENDENCIES]: (
-      nextDependencies: Set<string>,
+      nextDependencies: Set<StateKey>,
       callback: Function
     ) => void
     [UPDATE_DEPENDENCIES]: (
-      prevDependencies: Set<string>,
-      nextDependencies: Set<string>,
+      prevDependencies: Set<StateKey>,
+      nextDependencies: Set<StateKey>,
       callback: Function
     ) => void
     [CREATE_LOCAL_STATE]: <T extends object>(initialState: T) => State<T>
@@ -245,12 +245,14 @@ import { HtmlAttribute } from './html-attributes'
 
   const setPool = createSetPool()
 
+  type StateKey = string & { __: 'StateKey' }
+
   const createState = <StateT extends object>(
     initialState: StateT
   ): State<StateT> => {
     let nextObjectId = 0
-    const trackedDependencyStack: Set<string>[] = []
-    let dependencyMap = new Map<string, Set<Function>>()
+    const trackedDependencyStack: Set<StateKey>[] = []
+    let dependencyMap = new Map<StateKey, Set<Function>>()
     let deferredUpdates = new Set<Function>()
     let deferredUpdateQueued = false
 
@@ -278,21 +280,21 @@ import { HtmlAttribute } from './html-attributes'
     const trackedExectute = <F extends (...args: any[]) => any>(
       fn: F,
       ...args: Parameters<F>
-    ): [Set<string>, ReturnType<F>] => {
+    ): [Set<StateKey>, ReturnType<F>] => {
       trackedDependencyStack.push(setPool.allocate())
       const result = fn(...args)
       const dependencies = trackedDependencyStack.pop()
 
       assert(dependencies)
 
-      const ret = reusedReturnTuple as [Set<string>, ReturnType<F>]
+      const ret = reusedReturnTuple as [Set<StateKey>, ReturnType<F>]
       ret[0] = dependencies
       ret[1] = result
       return ret
     }
 
     const removeDependencies = (
-      dependencies: Set<string>,
+      dependencies: Set<StateKey>,
       callback: Function
     ) => {
       // TODO: Not sure if the necessity of adding this counts as a bug
@@ -316,8 +318,8 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const updateDependencies = (
-      prevDependencies: Set<string>,
-      nextDependencies: Set<string>,
+      prevDependencies: Set<StateKey>,
+      nextDependencies: Set<StateKey>,
       callback: Function
     ) => {
       for (const depKey of nextDependencies) {
@@ -367,7 +369,7 @@ import { HtmlAttribute } from './html-attributes'
           }
 
           if (trackedDependencyStack.length) {
-            const dependencyKey = id + '.' + key
+            const dependencyKey = (id + '.' + key) as StateKey
             trackedDependencyStack[trackedDependencyStack.length - 1].add(
               dependencyKey
             )
@@ -403,7 +405,7 @@ import { HtmlAttribute } from './html-attributes'
             target[key] = value
           }
 
-          const dependencyKey = id + '.' + key
+          const dependencyKey = (id + '.' + key) as StateKey
           const callbacks = dependencyMap.get(dependencyKey)
           if (callbacks) {
             if (!deferredUpdateQueued) {
@@ -450,7 +452,7 @@ import { HtmlAttribute } from './html-attributes'
     current?: T
   }
 
-  type ComponentId = number & { __componentId: true }
+  type ComponentId = number & { __: 'ComponentId' }
 
   // Hooks and their internal state
   const effects = new Map<ComponentId, Effect[]>()
@@ -463,7 +465,7 @@ import { HtmlAttribute } from './html-attributes'
 
   type Effect = {
     state_: State<object>
-    dependencies: Set<string>
+    dependencies: Set<StateKey>
     callback: () => void
   }
 
@@ -597,7 +599,7 @@ import { HtmlAttribute } from './html-attributes'
     // in production builds.
     let destroyed = false
 
-    let dependencies = setPool.allocate<string>()
+    let dependencies = setPool.allocate<StateKey>()
     let currentLeaf: Element | null = null
     let currentProps: PropsT = descriptor.props
     let nextLeafDescriptor: ElementDescriptor | null = null
@@ -843,14 +845,14 @@ import { HtmlAttribute } from './html-attributes'
 
   type LazyUpdate = {
     callback: () => void
-    dependencies: Set<string>
+    dependencies: Set<StateKey>
   }
 
   const reusedPrefixStack: string[] = []
   const reusedChildrenStack: Children[] = []
   const reusedIndexStack: number[] = []
 
-  type ChildKey = string & { __childKey: true }
+  type ChildKey = string & { __: 'ChildKey' }
 
   type Remount = (
     key: ChildKey,
