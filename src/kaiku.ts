@@ -50,12 +50,12 @@ import { HtmlAttribute } from './html-attributes'
   const TRACKED_EXECUTE = Symbol()
   const REMOVE_DEPENDENCIES = Symbol()
   const UPDATE_DEPENDENCIES = Symbol()
-  const GET_LOCAL_STATE = Symbol()
-  const DELETE_LOCAL_STATE = Symbol()
+  const CREATE_LOCAL_STATE = Symbol()
   const IMMUTABLE_FLAG = Symbol()
-  const CREATE_REF = Symbol()
+  const STATE_FLAG = Symbol()
 
-  type State<T> = T & {
+  type StateInternals = {
+    [STATE_FLAG]: true
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
       fn: F,
       ...args: Parameters<F>
@@ -69,13 +69,10 @@ import { HtmlAttribute } from './html-attributes'
       nextDependencies: Set<string>,
       callback: Function
     ) => void
-    [GET_LOCAL_STATE]: <T extends object>(
-      componentId: number,
-      state: T
-    ) => State<T>
-    [DELETE_LOCAL_STATE]: (componentId: number) => void
-    [CREATE_REF]: <T>(initialValue?: T) => State<Ref<T>>
+    [CREATE_LOCAL_STATE]: <T extends object>(initialState: T) => State<T>
   }
+
+  type State<T> = T & StateInternals
 
   type KaikuContext<StateT> = {
     state_: State<StateT>
@@ -142,10 +139,12 @@ import { HtmlAttribute } from './html-attributes'
     children_: Children
   }
 
+  type ElementGetter = () => HTMLElement
+
   type HtmlTag = {
     type_: ElementType.HtmlTag
     tag_: TagName
-    el: () => HTMLElement
+    el: ElementGetter
     update_: (nextProps: HtmlTagProps, children_: Children) => void
     destroy: () => void
   }
@@ -162,7 +161,7 @@ import { HtmlAttribute } from './html-attributes'
   type Component<PropsT extends ComponentPropsBase = ComponentPropsBase> = {
     type_: ElementType.Component
     componentFn: ComponentFunction<PropsT>
-    el: () => HTMLElement
+    el: ElementGetter
     update_: (nextProps: PropsT) => void
     destroy: () => void
   }
@@ -249,10 +248,7 @@ import { HtmlAttribute } from './html-attributes'
     initialState: StateT
   ): State<StateT> => {
     let nextObjectId = 0
-
-    const IS_WRAPPED = Symbol()
     const trackedDependencyStack: Set<string>[] = []
-    const localState = new Map<number, State<any>>()
     let dependencyMap = new Map<string, Set<Function>>()
     let deferredUpdates = new Set<Function>()
     let deferredUpdateQueued = false
@@ -314,8 +310,8 @@ import { HtmlAttribute } from './html-attributes'
       }
     }
 
-    const createRef = <T>(initialValue: T): Ref<T> => {
-      return wrap({ current: initialValue })
+    const createLocalState = <T extends object>(initialState: T): State<T> => {
+      return wrap(initialState)
     }
 
     const updateDependencies = (
@@ -348,35 +344,15 @@ import { HtmlAttribute } from './html-attributes'
       }
     }
 
-    const getLocalState = <T extends object>(
-      componentId: number,
-      state: T
-    ): State<T> => {
-      const existingState: State<T> | undefined = localState.get(componentId)
-      if (existingState) {
-        return existingState
-      } else {
-        const wrapped = wrap(state)
-        localState.set(componentId, wrapped)
-        return wrapped as State<T>
-      }
-    }
-
-    const deleteLocalState = (componentId: number) => {
-      localState.delete(componentId)
-    }
-
-    const internals = {
-      [IS_WRAPPED]: true,
+    const internals: StateInternals = {
+      [STATE_FLAG]: true,
       [TRACKED_EXECUTE]: trackedExectute,
       [REMOVE_DEPENDENCIES]: removeDependencies,
       [UPDATE_DEPENDENCIES]: updateDependencies,
-      [GET_LOCAL_STATE]: getLocalState,
-      [DELETE_LOCAL_STATE]: deleteLocalState,
-      [CREATE_REF]: createRef,
+      [CREATE_LOCAL_STATE]: createLocalState,
     }
 
-    const wrap = <T extends object>(obj: T) => {
+    const wrap = <T extends object>(obj: T): State<T> => {
       const id = ++nextObjectId
 
       const isArray = Array.isArray(obj)
@@ -418,7 +394,7 @@ import { HtmlAttribute } from './html-attributes'
           if (
             value !== null &&
             typeof value === 'object' &&
-            value[IS_WRAPPED] !== true &&
+            !(value[STATE_FLAG] as boolean) &&
             !(value[IMMUTABLE_FLAG] as boolean)
           ) {
             target[key] = wrap(value)
@@ -449,12 +425,10 @@ import { HtmlAttribute } from './html-attributes'
         proxy[key] = proxy[key]
       }
 
-      return proxy
+      return proxy as State<T>
     }
 
-    const state = wrap(initialState)
-
-    return state as State<StateT>
+    return wrap(initialState)
   }
 
   const immutable = <T extends object>(obj: T) => {
@@ -479,10 +453,11 @@ import { HtmlAttribute } from './html-attributes'
 
   // Hooks and their internal state
   const effects = new Map<ComponentId, Effect[]>()
-  const refs = new Map<ComponentId, Ref<any>[]>()
+  const componentStates = new Map<ComponentId, State<any>[]>()
+  const componentStateIndexStack: number[] = []
+
   const componentIdStack: ComponentId[] = []
   const stateStack: State<object>[] = []
-  const refIndexStack: number[] = []
   const componentsThatHaveUpdatedAtLeastOnce = new Set<ComponentId>()
 
   type Effect = {
@@ -494,14 +469,14 @@ import { HtmlAttribute } from './html-attributes'
   const startHookTracking = (componentId: ComponentId, state: State<any>) => {
     stateStack.push(state)
     componentIdStack.push(componentId)
-    refIndexStack.push(0)
+    componentStateIndexStack.push(0)
   }
 
   const stopHookTracking = () => {
     const state = stateStack.pop()
     assert(state)
 
-    const refIndex = refIndexStack.pop()
+    const refIndex = componentStateIndexStack.pop()
     assert(typeof refIndex !== 'undefined')
 
     const componentId = componentIdStack.pop()
@@ -511,11 +486,7 @@ import { HtmlAttribute } from './html-attributes'
 
   const destroyHooks = (componentId: ComponentId) => {
     componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
-
-    // NOTE: Local state allocated by the `useState` hook is released
-    // inside the element `destroy` function.
-
-    refs.delete(componentId)
+    componentStates.delete(componentId)
 
     const componentEffects = effects.get(componentId)
     if (!componentEffects) return
@@ -566,41 +537,36 @@ import { HtmlAttribute } from './html-attributes'
     componentEffects.push(eff)
   }
 
-  const useState = <T extends object>(initialState: T) => {
+  const useState = <T extends object>(initialState: T): State<T> => {
     const componentId = componentIdStack[componentIdStack.length - 1]
+    const componentStateIndex = componentStateIndexStack[
+      componentStateIndexStack.length - 1
+    ]++
     const state = stateStack[stateStack.length - 1] as State<object> | undefined
 
     assert(state)
     assert(typeof componentId !== 'undefined')
 
-    return state[GET_LOCAL_STATE](componentId, initialState)
-  }
+    let states = componentStates.get(componentId)
 
-  const useRef = <T>(initialValue?: T): Ref<T> => {
-    const componentId = componentIdStack[componentIdStack.length - 1]
-    const refIndex = refIndexStack[refIndexStack.length - 1]++
-    const state = stateStack[stateStack.length - 1] as State<object> | undefined
-
-    assert(state)
-    assert(typeof componentId !== 'undefined')
-
-    let componentRefs = refs.get(componentId)
-
-    if (!componentRefs) {
-      componentRefs = []
-      refs.set(componentId, componentRefs)
+    if (!states) {
+      states = []
+      componentStates.set(componentId, states)
     }
 
-    if (componentRefs.length > refIndex) {
-      return componentRefs[refIndex]
+    if (states.length > componentStateIndex) {
+      return states[componentStateIndex]
     }
 
-    const ref: Ref<T> = state[CREATE_REF](initialValue)
+    const componentState = state[CREATE_LOCAL_STATE](initialState)
 
-    componentRefs.push(ref)
+    states.push(componentState)
 
-    return ref
+    return componentState
   }
+
+  const useRef = <T>(initialValue?: T): Ref<T> =>
+    useState({ current: initialValue })
 
   // Components and HTML rendering
   let nextComponentId: ComponentId = 0 as ComponentId
@@ -698,10 +664,12 @@ import { HtmlAttribute } from './html-attributes'
         currentLeaf = createElement(nextLeafDescriptor, context, rootElement)
       } else if (nextLeafDescriptor.type_ === ElementDescriptorType.HtmlTag) {
         currentLeaf = createElement(nextLeafDescriptor, context)
-        if (rootElement.firstChild) {
-          rootElement.removeChild(rootElement.firstChild)
+        for (let i = 0; i < rootElement.children.length; i++) {
+          rootElement.removeChild(rootElement.children[i])
         }
-        rootElement.appendChild(currentLeaf.el())
+
+        const leafElement = currentLeaf.el()
+        rootElement.appendChild(leafElement)
       }
     }
 
@@ -719,14 +687,16 @@ import { HtmlAttribute } from './html-attributes'
       destroyHooks(id)
       currentLeaf.destroy()
       context.state_[REMOVE_DEPENDENCIES](dependencies, update_)
-      context.state_[DELETE_LOCAL_STATE](id)
       dependencies.clear()
       setPool.free(dependencies)
     }
 
     update_()
 
-    const el = () => currentLeaf!.el()
+    const el = () => {
+      assert(currentLeaf)
+      return currentLeaf.el()
+    }
 
     return {
       type_: ElementType.Component,
