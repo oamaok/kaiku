@@ -539,6 +539,30 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it("should handle component changing it's return tag", async () => {
+    const state = createState({ foo: false })
+
+    const Component = () =>
+      state.foo ? (
+        <span>Hello, I am a span tag!</span>
+      ) : (
+        <div>Hello, I am a div tag!</div>
+      )
+
+    const App = () => (
+      <div>
+        <Component />
+      </div>
+    )
+
+    render(<App />, rootNode, state)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.foo = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should handle changing child type', async () => {
     const state = createState({ a: true })
 

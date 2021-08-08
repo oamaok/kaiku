@@ -135,6 +135,7 @@ import { HtmlAttribute } from './html-attributes'
   type HtmlTagDescriptor = {
     type_: ElementDescriptorType.HtmlTag
     tag_: TagName
+    existingElement?: HTMLElement
     props: HtmlTagProps
     children_: Children
   }
@@ -587,7 +588,8 @@ import { HtmlAttribute } from './html-attributes'
   const createComponent = <PropsT, StateT>(
     descriptor: ComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>,
-    rootElement?: HTMLElement
+    key: ChildKey,
+    remount: Remount
   ): Component<PropsT> => {
     const id: ComponentId = ++nextComponentId as ComponentId
 
@@ -599,6 +601,8 @@ import { HtmlAttribute } from './html-attributes'
     let currentLeaf: Element | null = null
     let currentProps: PropsT = descriptor.props
     let nextLeafDescriptor: ElementDescriptor | null = null
+
+    let previousLeafEl: HTMLElement | null = null
 
     const update_ = (nextProps: PropsT = currentProps) => {
       assert(!destroyed, 'update() called even after component was destroyed')
@@ -644,6 +648,15 @@ import { HtmlAttribute } from './html-attributes'
       context.queueUpdate(updateLeaf)
     }
 
+    const remountSelf = () => {
+      assert(previousLeafEl)
+      assert(currentLeaf)
+      remount(key, previousLeafEl, currentLeaf.el())
+      if (__DEBUG__) {
+        previousLeafEl = null
+      }
+    }
+
     const updateLeaf = () => {
       assert(nextLeafDescriptor)
       const wasReused =
@@ -651,26 +664,17 @@ import { HtmlAttribute } from './html-attributes'
 
       if (wasReused) return
 
-      if (currentLeaf) {
-        currentLeaf.destroy()
-      }
-
-      if (!rootElement) {
-        currentLeaf = createElement(nextLeafDescriptor, context)
+      if (!currentLeaf) {
+        currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
         return
       }
 
-      if (nextLeafDescriptor.type_ === ElementDescriptorType.Component) {
-        currentLeaf = createElement(nextLeafDescriptor, context, rootElement)
-      } else if (nextLeafDescriptor.type_ === ElementDescriptorType.HtmlTag) {
-        currentLeaf = createElement(nextLeafDescriptor, context)
-        for (let i = 0; i < rootElement.children.length; i++) {
-          rootElement.removeChild(rootElement.children[i])
-        }
-
-        const leafElement = currentLeaf.el()
-        rootElement.appendChild(leafElement)
-      }
+      // Destroy and remount the leaf if it was not reused and
+      // this is not the initialization run
+      previousLeafEl = currentLeaf.el()
+      currentLeaf.destroy()
+      currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
+      context.queueMount(remountSelf)
     }
 
     const destroy = () => {
@@ -846,21 +850,31 @@ import { HtmlAttribute } from './html-attributes'
   const reusedChildrenStack: Children[] = []
   const reusedIndexStack: number[] = []
 
+  type ChildKey = string & { __childKey: true }
+
+  type Remount = (
+    key: ChildKey,
+    prevEl: HTMLElement,
+    nextEl: HTMLElement
+  ) => void
+
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
   ): HtmlTag => {
-    const element = document.createElement(descriptor.tag_)
+    const element = descriptor.existingElement
+      ? descriptor.existingElement
+      : document.createElement(descriptor.tag_)
 
-    let currentChildren: Map<string, ChildElement> = new Map()
-    let currentKeys: string[] = []
+    let currentChildren: Map<ChildKey, ChildElement> = new Map()
+    let currentKeys: ChildKey[] = []
     let currentProps: HtmlTagProps = {}
 
     let nextChildren: Children | null = null
-    let nextKeys: Set<string> | null = null
-    let nextKeysArr: string[] | null = null
+    let nextKeys: Set<ChildKey> | null = null
+    let nextKeysArr: ChildKey[] | null = null
     let deadChildren: ChildElement[] = []
-    let preservedElements: Set<string> | null = null
+    let preservedElements: Set<ChildKey> | null = null
 
     let lazyUpdates: LazyUpdate[] = []
 
@@ -1002,7 +1016,7 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const flattenChildren = (children: Children, prefix = '') => {
-      const flattenedChildren = new Map<string, RenderableChild>()
+      const flattenedChildren = new Map<ChildKey, RenderableChild>()
 
       if (__DEBUG__) {
         assert(reusedPrefixStack.length === 0)
@@ -1039,13 +1053,13 @@ import { HtmlAttribute } from './html-attributes'
         }
 
         if (typeof child === 'string' || typeof child === 'number') {
-          const key = keyPrefix + i
+          const key = (keyPrefix + i) as ChildKey
           flattenedChildren.set(key, child)
           continue
         }
 
         if (typeof child === 'function') {
-          const key = keyPrefix + i
+          const key = (keyPrefix + i) as ChildKey
           flattenedChildren.set(key, h(child, null))
           continue
         }
@@ -1060,11 +1074,10 @@ import { HtmlAttribute } from './html-attributes'
           reusedIndexStack.push(-1)
           continue
         }
-        const key =
-          keyPrefix +
+        const key = (keyPrefix +
           (typeof child.props.key !== 'undefined'
             ? '\u9375' + child.props.key
-            : i)
+            : i)) as ChildKey
         flattenedChildren.set(key, child)
       }
 
@@ -1084,7 +1097,7 @@ import { HtmlAttribute } from './html-attributes'
       const flattenedChildren = flattenChildren(nextChildren)
 
       const nextKeysIterator = flattenedChildren.keys()
-      nextKeysArr = Array.from(nextKeysIterator)
+      nextKeysArr = Array.from(nextKeysIterator) as ChildKey[]
       nextKeys = setPool.allocate(nextKeysArr)
       preservedElements = setPool.allocate(
         longestCommonSubsequence(currentKeys, nextKeysArr)
@@ -1132,7 +1145,10 @@ import { HtmlAttribute } from './html-attributes'
             continue
           }
 
-          currentChildren.set(key, createElement(nextChild, context))
+          currentChildren.set(
+            key,
+            createElement(nextChild, context, key, remountChild)
+          )
         }
       }
 
@@ -1171,7 +1187,7 @@ import { HtmlAttribute } from './html-attributes'
         const child = currentChildren.get(key)
         assert(child)
         const node = getNodeOfChildElement(child)
-        if (!prevKey) {
+        if (typeof prevKey === 'undefined') {
           element.appendChild(node)
         } else {
           const beforeChild = currentChildren.get(prevKey)
@@ -1194,6 +1210,29 @@ import { HtmlAttribute } from './html-attributes'
         nextKeys = null
         nextKeysArr = null
         preservedElements = null
+      }
+    }
+
+    const remountChild: Remount = (
+      key: ChildKey,
+      prevEl: HTMLElement,
+      nextEl: HTMLElement
+    ) => {
+      const child = currentChildren.get(key)
+      const childIndex = currentKeys.indexOf(key)
+      const prevKey = currentKeys[childIndex - 1]
+      assert(childIndex >= 0)
+      assert(child)
+
+      element.removeChild(prevEl)
+
+      if (typeof prevKey === 'undefined') {
+        element.appendChild(nextEl)
+      } else {
+        const beforeChild = currentChildren.get(prevKey)
+        assert(beforeChild)
+        const beforeNode = getNodeOfChildElement(beforeChild)
+        element.insertBefore(nextEl, beforeNode)
       }
     }
 
@@ -1226,10 +1265,13 @@ import { HtmlAttribute } from './html-attributes'
   const createElement = <PropsT, StateT>(
     descriptor: ElementDescriptor<PropsT>,
     context: KaikuContext<StateT>,
-    rootElement?: HTMLElement
+    key?: ChildKey,
+    remount?: Remount
   ): Element<PropsT> => {
     if (descriptor.type_ === ElementDescriptorType.Component) {
-      return createComponent(descriptor, context, rootElement)
+      assert(typeof key !== 'undefined')
+      assert(typeof remount !== 'undefined')
+      return createComponent(descriptor, context, key, remount)
     }
     return createHtmlTag(descriptor, context)
   }
@@ -1264,8 +1306,8 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
-  const render = <PropsT, StateT = object>(
-    rootDescriptor: ElementDescriptor<PropsT>,
+  const render = <StateT = object>(
+    rootDescriptor: ComponentDescriptor,
     rootElement: HTMLElement,
     state: State<StateT> = createState({}) as State<StateT>
   ) => {
@@ -1304,7 +1346,16 @@ import { HtmlAttribute } from './html-attributes'
       },
     }
 
-    createElement<PropsT, StateT>(rootDescriptor, context, rootElement)
+    createHtmlTag(
+      {
+        type_: ElementDescriptorType.HtmlTag,
+        tag_: rootElement.tagName as TagName,
+        existingElement: rootElement,
+        props: {},
+        children_: [rootDescriptor],
+      },
+      context
+    )
   }
 
   const kaiku = {
