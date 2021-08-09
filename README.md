@@ -1,8 +1,14 @@
-# Kaiku ![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
+<p align="center">
+<img src="https://raw.githubusercontent.com/oamaok/kaiku/main/misc/logo.png" height="200" />
+</p>
+
+![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
 
 From Finnish _kaiku_ (_/ˈkɑi̯ku/_), meaning _echo_.
 
 A lightweight JSX-based UI framework with a freely mutable, boilerplate-free global state management.
+
+[Try it out!](https://kaiku.dev/playground.html)
 
 ## Getting started
 
@@ -32,35 +38,30 @@ yarn add kaiku
 
 ## Example
 
-For more in-depth examples, see the [`examples/`](examples) directory in the repository root.
+A simple ticker component with global state management.
 
-```js
+```jsx
 import { h, render, createState } from 'kaiku'
 
-const state = createState({ counter: 0 })
+const state = createState({ ticks: 0 })
 
-const Counter = () => (
+const Ticker = () => (
   <div>
-    <span>Counter: {state.counter}</span>
-    <button
-      onClick={() => {
-        state.counter++
-      }}
-    >
-      Increment
-    </button>
-    <button
-      onClick={() => {
-        state.counter--
-      }}
-    >
-      Decrement
-    </button>
+    <div>
+      There have been <b>{state.ticks} ticks</b> since last update.
+    </div>
+    <button onClick={() => { state.ticks = 0 }}>Reset</button>
   </div>
 )
 
-render(<Counter />, document.body, state)
+setInterval(() => state.ticks++, 1000)
+
+render(<Ticker />, document.body, state)
 ```
+
+## Documentation
+
+See the [official website](https://kaiku.dev/guide.html).
 
 ## License
 
