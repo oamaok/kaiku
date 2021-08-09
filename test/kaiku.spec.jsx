@@ -1,5 +1,3 @@
-import { expect } from '@jest/globals'
-
 const getKaiku = () => {
   switch (process.env.KAIKU_VERSION) {
     case 'minified':
@@ -22,7 +20,8 @@ const getStack = () => {
   }
 }
 
-const { h, render, createState, useEffect, useState, useRef } = getKaiku()
+const { h, render, createState, useEffect, useState, useRef, Component } =
+  getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -723,5 +722,30 @@ describe('kaiku', () => {
     expect(firstEffectCall).toHaveBeenCalledTimes(2)
     expect(secondEffectCall).toHaveBeenCalledTimes(2)
     expect(thirdEffectCall).toHaveBeenCalledTimes(2)
+  })
+
+  it('should handle class components', async () => {
+    class App extends Component {
+      state = { counter: 0 }
+
+      render() {
+        return (
+          <div>
+            <span>Counter is at {this.state.counter}</span>
+            <button onClick={() => this.state.counter++}>Increase</button>
+          </div>
+        )
+      }
+    }
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    const button = rootNode.querySelector('button')
+    button.click()
+    await nextTick()
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })

@@ -36,6 +36,8 @@ terser
           'useRef',
           'immutable',
           'current',
+          'Component',
+          'state',
         ],
       },
     },

@@ -4,6 +4,10 @@ exports[`kaiku should handle changing rootNode.firstChild 1`] = `"<div>Hello, I 
 
 exports[`kaiku should handle changing rootNode.firstChild 2`] = `"<span>Hello, I am a span tag!</span>"`;
 
+exports[`kaiku should handle class components 1`] = `"<div><span>Counter is at 0</span><button>Increase</button></div>"`;
+
+exports[`kaiku should handle class components 2`] = `"<div><span>Counter is at 1</span><button>Increase</button></div>"`;
+
 exports[`kaiku should handle component changing it's return tag 1`] = `"<div><div>Hello, I am a div tag!</div></div>"`;
 
 exports[`kaiku should handle component changing it's return tag 2`] = `"<div><span>Hello, I am a span tag!</span></div>"`;

@@ -53,6 +53,7 @@ import { HtmlAttribute } from './html-attributes'
   const CREATE_LOCAL_STATE = Symbol()
   const IMMUTABLE_FLAG = Symbol()
   const STATE_FLAG = Symbol()
+  const CLASS_COMPONENT_FLAG = Symbol()
 
   type StateInternals = {
     [STATE_FLAG]: true
@@ -88,10 +89,14 @@ import { HtmlAttribute } from './html-attributes'
     | null
     | undefined
     | Child[]
-    | ComponentFunction<{}>
+    | FunctionComponentFunction<{}>
   type Children = Child[]
-  type ComponentPropsBase = { key?: string; children_?: Children[] }
-  type ComponentFunction<PropsT extends ComponentPropsBase> = (
+  type ComponentPropsBase = {
+    key?: string
+    ref?: Ref<any>
+    children_?: Children[]
+  }
+  type FunctionComponentFunction<PropsT extends ComponentPropsBase> = (
     props: PropsT
   ) => ElementDescriptor
   type ClassNames = string | { [key: string]: boolean } | ClassNames[]
@@ -117,18 +122,23 @@ import { HtmlAttribute } from './html-attributes'
 
   const enum ElementDescriptorType {
     HtmlTag,
-    Component,
+    FunctionComponent,
+    ClassComponent,
   }
 
   const enum ElementType {
     HtmlTag,
-    Component,
+    FunctionComponent,
+    ClassComponent,
     TextNode,
   }
 
   type ElementDescriptor<
     PropsT extends ComponentPropsBase = ComponentPropsBase
-  > = HtmlTagDescriptor | ComponentDescriptor<PropsT>
+  > =
+    | HtmlTagDescriptor
+    | FunctionComponentDescriptor<PropsT>
+    | ClassComponentDescriptor<PropsT>
 
   type TagName = keyof HTMLElementTagNameMap
 
@@ -140,6 +150,26 @@ import { HtmlAttribute } from './html-attributes'
     children_: Children
   }
 
+  type ClassComponentType<PropsT> = { new (props: PropsT): Component<PropsT> }
+
+  type ClassComponentDescriptor<
+    PropsT extends ComponentPropsBase = ComponentPropsBase
+  > = {
+    type_: ElementDescriptorType.ClassComponent
+    class_: ClassComponentType<PropsT>
+    props: PropsT
+    children_: Children
+  }
+
+  type ClassComponent<PropsT extends ComponentPropsBase = ComponentPropsBase> =
+    {
+      type_: ElementType.ClassComponent
+      class_: ClassComponentType<PropsT>
+      el: ElementGetter
+      update_: (nextProps: PropsT) => void
+      destroy: () => void
+    }
+
   type ElementGetter = () => HTMLElement
 
   type HtmlTag = {
@@ -150,18 +180,20 @@ import { HtmlAttribute } from './html-attributes'
     destroy: () => void
   }
 
-  type ComponentDescriptor<
+  type FunctionComponentDescriptor<
     PropsT extends ComponentPropsBase = ComponentPropsBase
   > = {
-    type_: ElementDescriptorType.Component
-    componentFn: ComponentFunction<PropsT>
+    type_: ElementDescriptorType.FunctionComponent
+    componentFn: FunctionComponentFunction<PropsT>
     props: PropsT
     children_: Children
   }
 
-  type Component<PropsT extends ComponentPropsBase = ComponentPropsBase> = {
-    type_: ElementType.Component
-    componentFn: ComponentFunction<PropsT>
+  type FunctionComponent<
+    PropsT extends ComponentPropsBase = ComponentPropsBase
+  > = {
+    type_: ElementType.FunctionComponent
+    componentFn: FunctionComponentFunction<PropsT>
     el: ElementGetter
     update_: (nextProps: PropsT) => void
     destroy: () => void
@@ -169,7 +201,8 @@ import { HtmlAttribute } from './html-attributes'
 
   type Element<PropsT extends ComponentPropsBase = ComponentPropsBase> =
     | HtmlTag
-    | Component<PropsT>
+    | FunctionComponent<PropsT>
+    | ClassComponent<PropsT>
 
   type ChildElement = Element | { type_: ElementType.TextNode; node: Text }
 
@@ -458,16 +491,16 @@ import { HtmlAttribute } from './html-attributes'
     current?: T
   }
 
-  type ComponentId = number & { __: 'ComponentId' }
+  type FunctionComponentId = number & { __: 'FunctionComponentId' }
 
   // Hooks and their internal state
-  const effects = new Map<ComponentId, Effect[]>()
-  const componentStates = new Map<ComponentId, State<any>[]>()
+  const effects = new Map<FunctionComponentId, Effect[]>()
+  const componentStates = new Map<FunctionComponentId, State<any>[]>()
   const componentStateIndexStack: number[] = []
 
-  const componentIdStack: ComponentId[] = []
+  const componentIdStack: FunctionComponentId[] = []
   const stateStack: State<object>[] = []
-  const componentsThatHaveUpdatedAtLeastOnce = new Set<ComponentId>()
+  const componentsThatHaveUpdatedAtLeastOnce = new Set<FunctionComponentId>()
 
   type Effect = {
     state_: State<object>
@@ -475,7 +508,10 @@ import { HtmlAttribute } from './html-attributes'
     callback: () => void
   }
 
-  const startHookTracking = (componentId: ComponentId, state: State<any>) => {
+  const startHookTracking = (
+    componentId: FunctionComponentId,
+    state: State<any>
+  ) => {
     stateStack.push(state)
     componentIdStack.push(componentId)
     componentStateIndexStack.push(0)
@@ -493,7 +529,7 @@ import { HtmlAttribute } from './html-attributes'
     componentsThatHaveUpdatedAtLeastOnce.add(componentId)
   }
 
-  const destroyHooks = (componentId: ComponentId) => {
+  const destroyHooks = (componentId: FunctionComponentId) => {
     componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
     componentStates.delete(componentId)
 
@@ -577,29 +613,181 @@ import { HtmlAttribute } from './html-attributes'
   const useRef = <T>(initialValue?: T): Ref<T> =>
     useState({ current: initialValue })
 
-  // Components and HTML rendering
-  let nextComponentId: ComponentId = 0 as ComponentId
+  // ClassComponent
 
-  const createComponentDescriptor = <PropsT>(
-    component: ComponentFunction<PropsT>,
+  abstract class Component<PropsT> {
+    static [CLASS_COMPONENT_FLAG] = true
+    state: object = {}
+    constructor() {}
+    abstract render(props: PropsT): ElementDescriptor
+  }
+
+  const createClassComponentDescriptor = <PropsT>(
+    component: ClassComponentType<PropsT>,
     props: PropsT,
     children_: Children
-  ): ComponentDescriptor<PropsT> => {
+  ): ClassComponentDescriptor<PropsT> => {
     return {
-      type_: ElementDescriptorType.Component,
+      type_: ElementDescriptorType.ClassComponent,
+      class_: component,
+      props,
+      children_,
+    }
+  }
+
+  const createClassComponent = <PropsT extends ComponentPropsBase, StateT>(
+    descriptor: ClassComponentDescriptor<PropsT>,
+    context: KaikuContext<StateT>,
+    key: ChildKey,
+    remount: Remount
+  ): ClassComponent<PropsT> => {
+    const instance = new descriptor.class_(descriptor.props)
+    instance.render = instance.render.bind(instance)
+    instance.state = context.state_[CREATE_LOCAL_STATE](instance.state)
+
+    // Only used for debugging, don't rely on this. It should be dropped
+    // in production builds.
+    let destroyed = false
+
+    let dependencies = setPool.allocate<StateKey>()
+    let currentLeaf: Element | null = null
+    let currentProps: PropsT = descriptor.props
+    let nextLeafDescriptor: ElementDescriptor | null = null
+
+    let previousLeafEl: HTMLElement | null = null
+
+    const update_ = (nextProps: PropsT = currentProps) => {
+      assert(!destroyed, 'update() called even after component was destroyed')
+
+      if (nextProps !== currentProps) {
+        const properties = union(
+          Object.keys(nextProps),
+          Object.keys(currentProps)
+        ) as Set<keyof PropsT>
+
+        let unchanged = true
+        for (const property of properties) {
+          if (nextProps[property] !== currentProps[property]) {
+            unchanged = false
+            break
+          }
+        }
+
+        if (unchanged) {
+          currentProps = nextProps
+          return
+        }
+
+        if ('ref' in nextProps) {
+          nextProps.ref!.current = instance
+        }
+      }
+
+      const [nextDependencies, leafDescriptor] = context.state_[
+        TRACKED_EXECUTE
+      ](instance.render, nextProps)
+
+      nextLeafDescriptor = leafDescriptor
+      context.state_[UPDATE_DEPENDENCIES](
+        dependencies,
+        nextDependencies,
+        update_
+      )
+
+      dependencies.clear()
+      setPool.free(dependencies)
+      dependencies = nextDependencies
+      currentProps = nextProps
+
+      context.queueUpdate(updateLeaf)
+    }
+
+    const remountSelf = () => {
+      assert(previousLeafEl)
+      assert(currentLeaf)
+      remount(key, previousLeafEl, currentLeaf.el())
+      if (__DEBUG__) {
+        previousLeafEl = null
+      }
+    }
+
+    const updateLeaf = () => {
+      assert(nextLeafDescriptor)
+      const wasReused =
+        currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
+
+      if (wasReused) return
+
+      if (!currentLeaf) {
+        currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
+        return
+      }
+
+      // Destroy and remount the leaf if it was not reused and
+      // this is not the initialization run
+      previousLeafEl = currentLeaf.el()
+      currentLeaf.destroy()
+      currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
+      context.queueMount(remountSelf)
+    }
+
+    const destroy = () => {
+      assert(currentLeaf)
+      assert(effects)
+
+      // This `if` is to ensure the `destroyed` flag is dropped in
+      // production builds.
+      if (__DEBUG__) {
+        assert(!destroyed)
+        destroyed = true
+      }
+
+      currentLeaf.destroy()
+      context.state_[REMOVE_DEPENDENCIES](dependencies, update_)
+      dependencies.clear()
+      setPool.free(dependencies)
+    }
+
+    update_()
+
+    const el = () => {
+      assert(currentLeaf)
+      return currentLeaf.el()
+    }
+
+    return {
+      type_: ElementType.ClassComponent,
+      class_: descriptor.class_,
+      el,
+      update_,
+      destroy,
+    }
+  }
+
+  // FunctionComponents and HTML rendering
+  let nextFunctionComponentId: FunctionComponentId = 0 as FunctionComponentId
+
+  const createFunctionComponentDescriptor = <PropsT>(
+    component: FunctionComponentFunction<PropsT>,
+    props: PropsT,
+    children_: Children
+  ): FunctionComponentDescriptor<PropsT> => {
+    return {
+      type_: ElementDescriptorType.FunctionComponent,
       componentFn: component,
       props,
       children_,
     }
   }
 
-  const createComponent = <PropsT, StateT>(
-    descriptor: ComponentDescriptor<PropsT>,
+  const createFunctionComponent = <PropsT, StateT>(
+    descriptor: FunctionComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>,
     key: ChildKey,
     remount: Remount
-  ): Component<PropsT> => {
-    const id: ComponentId = ++nextComponentId as ComponentId
+  ): FunctionComponent<PropsT> => {
+    const id: FunctionComponentId =
+      ++nextFunctionComponentId as FunctionComponentId
 
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
@@ -711,7 +899,7 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     return {
-      type_: ElementType.Component,
+      type_: ElementType.FunctionComponent,
       componentFn: descriptor.componentFn,
       el,
       update_,
@@ -835,9 +1023,18 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     if (
-      nextChild.type_ === ElementDescriptorType.Component &&
-      prevChild.type_ === ElementType.Component &&
+      nextChild.type_ === ElementDescriptorType.FunctionComponent &&
+      prevChild.type_ === ElementType.FunctionComponent &&
       nextChild.componentFn === prevChild.componentFn
+    ) {
+      prevChild.update_(nextChild.props)
+      return true
+    }
+
+    if (
+      nextChild.type_ === ElementDescriptorType.ClassComponent &&
+      prevChild.type_ === ElementType.ClassComponent &&
+      nextChild.class_ === prevChild.class_
     ) {
       prevChild.update_(nextChild.props)
       return true
@@ -1276,11 +1473,18 @@ import { HtmlAttribute } from './html-attributes'
     key?: ChildKey,
     remount?: Remount
   ): Element<PropsT> => {
-    if (descriptor.type_ === ElementDescriptorType.Component) {
+    if (descriptor.type_ === ElementDescriptorType.FunctionComponent) {
       assert(typeof key !== 'undefined')
       assert(typeof remount !== 'undefined')
-      return createComponent(descriptor, context, key, remount)
+      return createFunctionComponent(descriptor, context, key, remount)
     }
+
+    if (descriptor.type_ === ElementDescriptorType.ClassComponent) {
+      assert(typeof key !== 'undefined')
+      assert(typeof remount !== 'undefined')
+      return createClassComponent(descriptor, context, key, remount)
+    }
+
     return createHtmlTag(descriptor, context)
   }
 
@@ -1290,23 +1494,38 @@ import { HtmlAttribute } from './html-attributes'
     ...children: Children
   ): HtmlTagDescriptor
   function h<PropsT>(
-    component: ComponentFunction<PropsT>,
+    component: FunctionComponentFunction<PropsT>,
     props: PropsT | null,
     ...children: Children
-  ): ComponentDescriptor<PropsT>
-  function h(tagOrComponent: any, props: any, ...children: any) {
-    assert(
-      typeof tagOrComponent === 'string' || typeof tagOrComponent === 'function'
-    )
+  ): FunctionComponentDescriptor<PropsT>
+  function h<PropsT>(
+    component: ClassComponentType<PropsT>,
+    props: PropsT | null,
+    ...children: Children
+  ): ClassComponentDescriptor<PropsT>
+  function h(component: any, props: any, ...children: any) {
+    assert(typeof component === 'string' || typeof component === 'function')
 
-    switch (typeof tagOrComponent) {
+    switch (typeof component) {
       case 'function': {
-        return createComponentDescriptor(tagOrComponent, props ?? {}, children)
+        if (component[CLASS_COMPONENT_FLAG] as boolean) {
+          return createClassComponentDescriptor(
+            component,
+            props ?? {},
+            children
+          )
+        }
+
+        return createFunctionComponentDescriptor(
+          component,
+          props ?? {},
+          children
+        )
       }
 
       case 'string': {
         return createHtmlTagDescriptor(
-          tagOrComponent as TagName,
+          component as TagName,
           props ?? {},
           children
         )
@@ -1315,7 +1534,7 @@ import { HtmlAttribute } from './html-attributes'
   }
 
   const render = <StateT = object>(
-    rootDescriptor: ComponentDescriptor,
+    rootDescriptor: FunctionComponentDescriptor,
     rootElement: HTMLElement,
     state: State<StateT> = createState({}) as State<StateT>
   ) => {
@@ -1374,6 +1593,7 @@ import { HtmlAttribute } from './html-attributes'
     useState,
     useRef,
     immutable,
+    Component,
   }
 
   if (typeof module !== 'undefined') {
