@@ -37,6 +37,8 @@ terser
           'immutable',
           'current',
           'Component',
+          'componentDidMount',
+          'componentWillUnmount',
           'state',
         ],
       },

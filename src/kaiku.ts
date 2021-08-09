@@ -619,6 +619,8 @@ import { HtmlAttribute } from './html-attributes'
     static [CLASS_COMPONENT_FLAG] = true
     state: object = {}
     constructor() {}
+    componentDidMount() {}
+    componentWillUnmount() {}
     abstract render(props: PropsT): ElementDescriptor
   }
 
@@ -644,6 +646,7 @@ import { HtmlAttribute } from './html-attributes'
     const instance = new descriptor.class_(descriptor.props)
     instance.render = instance.render.bind(instance)
     instance.state = context.state_[CREATE_LOCAL_STATE](instance.state)
+    instance.componentDidMount = instance.componentDidMount.bind(instance)
 
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
@@ -720,6 +723,8 @@ import { HtmlAttribute } from './html-attributes'
 
       if (!currentLeaf) {
         currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
+
+        context.queueMount(instance.componentDidMount)
         return
       }
 
@@ -732,6 +737,8 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const destroy = () => {
+      instance.componentWillUnmount()
+
       assert(currentLeaf)
       assert(effects)
 

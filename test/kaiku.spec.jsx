@@ -748,4 +748,24 @@ describe('kaiku', () => {
 
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should handle componentDidMount', async () => {
+    const componentDidMountCall = jest.fn()
+
+    class App extends Component {
+      ref = {}
+
+      componentDidMount() {
+        componentDidMountCall(this.ref.current.innerHTML)
+      }
+
+      render() {
+        return <div ref={this.ref}>Hello world!</div>
+      }
+    }
+
+    render(<App />, rootNode)
+
+    expect(componentDidMountCall).toHaveBeenCalledWith('Hello world!')
+  })
 })
