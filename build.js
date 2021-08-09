@@ -2,6 +2,11 @@ const fs = require('fs')
 const esbuild = require('esbuild')
 const terser = require('terser')
 
+fs.mkdirSync('dist')
+fs.copyFileSync('src/package-entry.js', 'dist/index.js')
+
+console.log('Build development version')
+console.time(' - time')
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
   outfile: 'dist/kaiku.dev.js',
@@ -9,7 +14,10 @@ esbuild.buildSync({
     __DEBUG__: true,
   },
 })
+console.timeEnd(' - time')
 
+console.log('Build production version')
+console.time(' - time')
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
   outfile: 'dist/kaiku.min.js',
@@ -17,9 +25,13 @@ esbuild.buildSync({
     __DEBUG__: false,
   },
 })
+console.timeEnd(' - time')
 
+console.log('Minify production version')
+console.time(' - time')
 terser
   .minify(fs.readFileSync('dist/kaiku.min.js').toString(), {
+    sourceMap: true,
     compress: {
       passes: 3,
       unsafe: true,
@@ -45,5 +57,9 @@ terser
     },
   })
   .then((minified) => {
+    minified.code += '\n//# sourceMappingURL=kaiku.min.js.map'
+
     fs.writeFileSync('dist/kaiku.min.js', minified.code)
+    fs.writeFileSync('dist/kaiku.min.js.map', minified.map)
   })
+console.timeEnd(' - time')
