@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/oamaok/kaiku/main/misc/logo.png" height="200" />
+<img src="https://raw.githubusercontent.com/oamaok/kaiku/main/misc/logo.png" height="150" />
 </p>
 
 ![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
