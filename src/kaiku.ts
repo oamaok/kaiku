@@ -79,6 +79,7 @@ import { HtmlAttribute } from './html-attributes'
     state_: State<StateT>
     queueUpdate: (fn: () => void) => void
     queueMount: (fn: () => void) => void
+    queuePostMount: (fn: () => void) => void
   }
   type RenderableChild = ElementDescriptor | string | number
   type Child =
@@ -473,7 +474,9 @@ import { HtmlAttribute } from './html-attributes'
     return wrap(initialState)
   }
 
-  const immutable = <T extends object>(obj: T) => {
+  type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
+
+  const immutable = <T extends object>(obj: T): Immutable<T> => {
     return new Proxy(obj, {
       get(target, _key) {
         const key = _key as keyof T
@@ -484,7 +487,7 @@ import { HtmlAttribute } from './html-attributes'
 
         return target[key]
       },
-    })
+    }) as Immutable<T>
   }
 
   type Ref<T> = {
@@ -620,6 +623,7 @@ import { HtmlAttribute } from './html-attributes'
     state: object = {}
     constructor() {}
     componentDidMount() {}
+    componentDidUpdate() {}
     componentWillUnmount() {}
     abstract render(props: PropsT): ElementDescriptor
   }
@@ -647,6 +651,7 @@ import { HtmlAttribute } from './html-attributes'
     instance.render = instance.render.bind(instance)
     instance.state = context.state_[CREATE_LOCAL_STATE](instance.state)
     instance.componentDidMount = instance.componentDidMount.bind(instance)
+    instance.componentDidUpdate = instance.componentDidUpdate.bind(instance)
 
     // Only used for debugging, don't rely on this. It should be dropped
     // in production builds.
@@ -719,12 +724,14 @@ import { HtmlAttribute } from './html-attributes'
       const wasReused =
         currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
 
-      if (wasReused) return
+      if (wasReused) {
+        context.queuePostMount(instance.componentDidUpdate)
+        return
+      }
 
       if (!currentLeaf) {
         currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
-
-        context.queueMount(instance.componentDidMount)
+        context.queuePostMount(instance.componentDidMount)
         return
       }
 
@@ -734,6 +741,7 @@ import { HtmlAttribute } from './html-attributes'
       currentLeaf.destroy()
       currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
       context.queueMount(remountSelf)
+      context.queuePostMount(instance.componentDidUpdate)
     }
 
     const destroy = () => {
@@ -958,11 +966,8 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     if (aLength === 1 || bLength === 1) {
-      const smaller = aLength === 1 ? a : b
-      const bigger = aLength === 1 ? b : a
-
-      for (let i = 0; i < bigger.length; i++) {
-        if (bigger[i] === smaller[0]) return smaller
+      if (a[0] === b[0]) {
+        return a.length === 0 ? b : a
       }
 
       return []
@@ -1324,9 +1329,7 @@ import { HtmlAttribute } from './html-attributes'
         assert(typeof nextChild !== 'undefined')
         assert(prevChild)
 
-        const wasReused = reuseChildElement(prevChild, nextChild)
-
-        if (!wasReused) {
+        if (!reuseChildElement(prevChild, nextChild)) {
           // Let's not mark the child as dead yet.
           // It might be reused in the next loop.
           preservedElements.delete(key)
@@ -1341,27 +1344,27 @@ import { HtmlAttribute } from './html-attributes'
 
         const prevChild = currentChildren.get(key)
 
-        const wasReused = prevChild && reuseChildElement(prevChild, nextChild)
-
-        if (!wasReused) {
-          if (prevChild) {
-            deadChildren.push(prevChild)
-          }
-
-          if (typeof nextChild === 'number' || typeof nextChild === 'string') {
-            const node = document.createTextNode(nextChild as string)
-            currentChildren.set(key, {
-              type_: ElementType.TextNode,
-              node,
-            })
-            continue
-          }
-
-          currentChildren.set(
-            key,
-            createElement(nextChild, context, key, remountChild)
-          )
+        if (prevChild && reuseChildElement(prevChild, nextChild)) {
+          continue
         }
+
+        if (prevChild) {
+          deadChildren.push(prevChild)
+        }
+
+        if (typeof nextChild === 'number' || typeof nextChild === 'string') {
+          const node = document.createTextNode(nextChild as string)
+          currentChildren.set(key, {
+            type_: ElementType.TextNode,
+            node,
+          })
+          continue
+        }
+
+        currentChildren.set(
+          key,
+          createElement(nextChild, context, key, remountChild)
+        )
       }
 
       // Check which children will not be a part of the next render.
@@ -1546,23 +1549,21 @@ import { HtmlAttribute } from './html-attributes'
     state: State<StateT> = createState({}) as State<StateT>
   ) => {
     let currentlyExecutingUpdates = false
-    const updates = new Set<() => void>()
-    const mounts = new Set<() => void>()
+    const updates: (() => void)[] = []
+    const mounts: (() => void)[] = []
+    const postMounts: (() => void)[] = []
 
     const executeUpdatesAndMounts = () => {
-      if (currentlyExecutingUpdates) {
-        return
-      }
       currentlyExecutingUpdates = true
 
-      for (const fn of updates) {
+      for (let fn; fn = updates.pop(); ) {
         fn()
-        updates.delete(fn)
       }
-
-      for (const fn of mounts) {
+      for (let fn; fn = mounts.pop(); ) {
         fn()
-        mounts.delete(fn)
+      }
+      for (let fn; fn = postMounts.pop(); ) {
+        fn()
       }
 
       currentlyExecutingUpdates = false
@@ -1571,11 +1572,24 @@ import { HtmlAttribute } from './html-attributes'
     const context: KaikuContext<StateT> = {
       state_: state,
       queueUpdate(fn) {
-        updates.add(fn)
+        updates.push(fn)
+        if (currentlyExecutingUpdates) {
+          return
+        }
         executeUpdatesAndMounts()
       },
       queueMount(fn) {
-        mounts.add(fn)
+        mounts.push(fn)
+        if (currentlyExecutingUpdates) {
+          return
+        }
+        executeUpdatesAndMounts()
+      },
+      queuePostMount(fn) {
+        postMounts.push(fn)
+        if (currentlyExecutingUpdates) {
+          return
+        }
         executeUpdatesAndMounts()
       },
     }

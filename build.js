@@ -34,6 +34,7 @@ terser
     sourceMap: true,
     compress: {
       passes: 3,
+      inline: false,
       unsafe: true,
       booleans_as_integers: true,
     },
