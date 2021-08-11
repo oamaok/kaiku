@@ -211,7 +211,7 @@ describe('kaiku', () => {
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
 
-  it('should handle updates in an array efficiently', async () => {
+  it.only('should handle updates in an array efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
 

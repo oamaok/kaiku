@@ -207,12 +207,18 @@ import { HtmlAttribute } from './html-attributes'
 
   type ChildElement = Element | { type_: ElementType.TextNode; node: Text }
 
-  const union = <T>(a: Set<T> | T[], b: Set<T> | T[]): Set<T> => {
-    const s = setPool.allocate(a)
-    for (const v of b) {
-      s.add(v)
+  const unionOfKeys = <A extends object, B extends object>(
+    a: A,
+    b: B
+  ): (keyof (A & B))[] => {
+    const res = Object.keys(a)
+    const bKeys = Object.keys(b)
+    for (const key of bKeys) {
+      if (!(key in a)) {
+        res.push(key)
+      }
     }
-    return s
+    return res as (keyof (A & B))[]
   }
 
   const createSetPool = () => {
@@ -292,22 +298,22 @@ import { HtmlAttribute } from './html-attributes'
 
     const deferredUpdate = () => {
       deferredUpdateQueued = false
+
       for (const callback of deferredUpdates) {
         const size = deferredUpdates.size
         callback()
 
-        assert(
-          size >= deferredUpdates.size,
-          'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
-        )
+        if (__DEBUG__) {
+          assert(
+            size >= deferredUpdates.size,
+            'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
+          )
 
-        deferredUpdates.delete(callback)
+          deferredUpdates.delete(callback)
+        }
       }
 
-      assert(
-        !deferredUpdates.size,
-        'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
-      )
+      deferredUpdates.clear()
     }
 
     const reusedReturnTuple: any[] = []
@@ -668,10 +674,7 @@ import { HtmlAttribute } from './html-attributes'
       assert(!destroyed, 'update() called even after component was destroyed')
 
       if (nextProps !== currentProps) {
-        const properties = union(
-          Object.keys(nextProps),
-          Object.keys(currentProps)
-        ) as Set<keyof PropsT>
+        const properties = unionOfKeys(nextProps, currentProps)
 
         let unchanged = true
         for (const property of properties) {
@@ -795,6 +798,8 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
+  const emptyObject = {}
+
   const createFunctionComponent = <PropsT, StateT>(
     descriptor: FunctionComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>,
@@ -819,10 +824,10 @@ import { HtmlAttribute } from './html-attributes'
       assert(!destroyed, 'update() called even after component was destroyed')
 
       if (nextProps !== currentProps) {
-        const properties = union(
-          Object.keys(nextProps),
-          Object.keys(currentProps)
-        ) as Set<keyof PropsT>
+        const properties = unionOfKeys(
+          nextProps || emptyObject,
+          currentProps || emptyObject
+        )
 
         let unchanged = true
         for (const property of properties) {
@@ -956,8 +961,7 @@ import { HtmlAttribute } from './html-attributes'
     return className.trim()
   }
 
-  // TODO: Add special cases for short arrays
-  const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
+  const slowLCS = <T>(a: T[], b: T[]): T[] => {
     const aLength = a.length
     const bLength = b.length
 
@@ -965,9 +969,9 @@ import { HtmlAttribute } from './html-attributes'
       return []
     }
 
-    if (aLength === 1 || bLength === 1) {
+    if (aLength === 1 && bLength === 1) {
       if (a[0] === b[0]) {
-        return a.length === 0 ? b : a
+        return a
       }
 
       return []
@@ -1008,6 +1012,88 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     return res.reverse()
+  }
+
+  const longestCommonSubsequence = <T>(a: T[], b: T[]): T[] => {
+    const aLength = a.length
+    const bLength = b.length
+
+    if (aLength === 0 || bLength === 0) {
+      return []
+    }
+
+    if (aLength === 1 && bLength === 1) {
+      if (a[0] === b[0]) {
+        return a
+      }
+
+      return []
+    }
+
+    let aStart = 0
+    let bStart = 0
+    let aEnd = aLength - 1
+    let bEnd = bLength - 1
+
+    const head: T[] = []
+    const tail: T[] = []
+
+    while (aStart < aLength && bStart < bLength) {
+      for (; aStart < aLength && bStart < bLength; aStart++, bStart++) {
+        if (a[aStart] !== b[bStart]) {
+          break
+        }
+        head.push(a[aStart])
+      }
+
+      if (a[aStart + 1] === b[bStart + 1]) {
+        aStart++
+        bStart++
+      } else if (a[aStart] === b[bStart + 1]) {
+        bStart++
+      } else if (a[aStart + 1] === b[bStart]) {
+        aStart++
+      } else {
+        break
+      }
+    }
+
+    while (aStart < aEnd && bStart < bEnd) {
+      for (; aStart < aEnd && bStart < bEnd; aEnd--, bEnd--) {
+        if (a[aEnd] !== b[bEnd]) {
+          break
+        }
+        tail.push(a[aEnd])
+      }
+
+      if (a[aEnd - 1] === b[bEnd - 1]) {
+        aEnd--
+        bEnd--
+      } else if (a[aEnd] === b[bEnd - 1]) {
+        bEnd--
+      } else if (a[aEnd - 1] === b[bEnd]) {
+        aEnd--
+      } else {
+        break
+      }
+    }
+
+    aEnd++
+    bEnd++
+
+    if (aStart < aEnd && bStart < bEnd) {
+      const subLCS = slowLCS(a.slice(aStart, aEnd), b.slice(bStart, bEnd))
+
+      for (let i = 0; i < subLCS.length; i++) {
+        head.push(subLCS[i])
+      }
+    }
+
+    for (let item; (item = tail.pop()); ) {
+      head.push(item)
+    }
+
+    return head
   }
 
   const reuseChildElement = (
@@ -1088,8 +1174,7 @@ import { HtmlAttribute } from './html-attributes'
     let currentProps: HtmlTagProps = {}
 
     let nextChildren: Children | null = null
-    let nextKeys: Set<ChildKey> | null = null
-    let nextKeysArr: ChildKey[] | null = null
+    let nextKeys: ChildKey[] | null = null
     let deadChildren: ChildElement[] = []
     let preservedElements: Set<ChildKey> | null = null
 
@@ -1100,6 +1185,8 @@ import { HtmlAttribute } from './html-attributes'
         handler(prop)
         return
       }
+
+      let lastValue: T | undefined = undefined
 
       const run = () => {
         const [nextDependencies, value] = context.state_[TRACKED_EXECUTE](
@@ -1113,7 +1200,10 @@ import { HtmlAttribute } from './html-attributes'
         lazyUpdate.dependencies.clear()
         setPool.free(lazyUpdate.dependencies)
         lazyUpdate.dependencies = nextDependencies
-        handler(value)
+        if (value !== lastValue) {
+          lastValue = value
+          handler(value)
+        }
       }
 
       const lazyUpdate: LazyUpdate = {
@@ -1143,10 +1233,7 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const update_ = (nextProps: HtmlTagProps, children: Children) => {
-      const keys = union(
-        Object.keys(nextProps),
-        Object.keys(currentProps)
-      ) as Set<keyof HtmlTagProps>
+      const keys = unionOfKeys(nextProps, currentProps)
 
       destroyLazyUpdates()
 
@@ -1179,10 +1266,10 @@ import { HtmlAttribute } from './html-attributes'
         } else {
           switch (key) {
             case 'style': {
-              const properties = union(
-                Object.keys(nextProps.style || {}),
-                Object.keys(currentProps.style || {})
-              ) as Set<CssProperty>
+              const properties = unionOfKeys(
+                nextProps.style || emptyObject,
+                currentProps.style || emptyObject
+              )
 
               for (const property of properties) {
                 if (
@@ -1314,10 +1401,9 @@ import { HtmlAttribute } from './html-attributes'
       const flattenedChildren = flattenChildren(nextChildren)
 
       const nextKeysIterator = flattenedChildren.keys()
-      nextKeysArr = Array.from(nextKeysIterator) as ChildKey[]
-      nextKeys = setPool.allocate(nextKeysArr)
+      nextKeys = Array.from(nextKeysIterator) as ChildKey[]
       preservedElements = setPool.allocate(
-        longestCommonSubsequence(currentKeys, nextKeysArr)
+        longestCommonSubsequence(currentKeys, nextKeys)
       )
 
       // Check if we can reuse any of the components/elements
@@ -1370,7 +1456,7 @@ import { HtmlAttribute } from './html-attributes'
       // Check which children will not be a part of the next render.
       // Mark them for destruction and remove from currentChildren.
       for (const [key, child] of currentChildren) {
-        if (!nextKeys.has(key)) {
+        if (!nextKeys.includes(key)) {
           deadChildren.push(child)
           currentChildren.delete(key)
         }
@@ -1379,7 +1465,6 @@ import { HtmlAttribute } from './html-attributes'
 
     const mountChildren = () => {
       assert(nextKeys)
-      assert(nextKeysArr)
       assert(preservedElements)
 
       for (let child; (child = deadChildren.pop()); ) {
@@ -1393,9 +1478,9 @@ import { HtmlAttribute } from './html-attributes'
 
       // Since DOM operations only allow you to append or insertBefore,
       // we must start from the end of the keys.
-      for (let i = nextKeysArr.length - 1; i >= 0; i--) {
-        const key = nextKeysArr[i]
-        const prevKey = nextKeysArr[i + 1]
+      for (let i = nextKeys.length - 1; i >= 0; i--) {
+        const key = nextKeys[i]
+        const prevKey = nextKeys[i + 1]
 
         if (preservedElements.has(key)) continue
 
@@ -1412,10 +1497,8 @@ import { HtmlAttribute } from './html-attributes'
         }
       }
 
-      currentKeys = nextKeysArr
-      nextKeys.clear()
+      currentKeys = nextKeys
       preservedElements.clear()
-      setPool.free(nextKeys)
       setPool.free(preservedElements)
 
       if (__DEBUG__) {
@@ -1423,7 +1506,6 @@ import { HtmlAttribute } from './html-attributes'
 
         // Ensure these are not reused
         nextKeys = null
-        nextKeysArr = null
         preservedElements = null
       }
     }
@@ -1556,13 +1638,13 @@ import { HtmlAttribute } from './html-attributes'
     const executeUpdatesAndMounts = () => {
       currentlyExecutingUpdates = true
 
-      for (let fn; fn = updates.pop(); ) {
+      for (let fn; (fn = updates.pop()); ) {
         fn()
       }
-      for (let fn; fn = mounts.pop(); ) {
+      for (let fn; (fn = mounts.pop()); ) {
         fn()
       }
-      for (let fn; fn = postMounts.pop(); ) {
+      for (let fn; (fn = postMounts.pop()); ) {
         fn()
       }
 
