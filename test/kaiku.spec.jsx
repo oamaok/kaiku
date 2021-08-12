@@ -107,6 +107,12 @@ describe('kaiku', () => {
 
     expect(displayElem.innerHTML).toBe('The counter is at 1')
     expect(rootNode.innerHTML).toMatchSnapshot()
+
+    buttonElem.click()
+    await nextTick()
+
+    expect(displayElem.innerHTML).toBe('The counter is at 2')
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
   it('should only update dependant attributes without re-render', async () => {
@@ -211,7 +217,7 @@ describe('kaiku', () => {
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
 
-  it.only('should handle updates in an array efficiently', async () => {
+  it('should handle updates in an array efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
 

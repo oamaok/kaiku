@@ -55,6 +55,12 @@ import { HtmlAttribute } from './html-attributes'
   const STATE_FLAG = Symbol()
   const CLASS_COMPONENT_FLAG = Symbol()
 
+  type Dependee =
+    | Effect
+    | LazyUpdate<any>
+    | FunctionComponent<any>
+    | ClassComponent<any>
+
   type StateInternals = {
     [STATE_FLAG]: true
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
@@ -63,12 +69,12 @@ import { HtmlAttribute } from './html-attributes'
     ) => [Set<StateKey>, ReturnType<F>]
     [REMOVE_DEPENDENCIES]: (
       nextDependencies: Set<StateKey>,
-      callback: Function
+      dependee: Dependee
     ) => void
     [UPDATE_DEPENDENCIES]: (
       prevDependencies: Set<StateKey>,
       nextDependencies: Set<StateKey>,
-      callback: Function
+      dependee: Dependee
     ) => void
     [CREATE_LOCAL_STATE]: <T extends object>(initialState: T) => State<T>
   }
@@ -77,9 +83,18 @@ import { HtmlAttribute } from './html-attributes'
 
   type KaikuContext<StateT> = {
     state_: State<StateT>
-    queueUpdate: (fn: () => void) => void
-    queueMount: (fn: () => void) => void
-    queuePostMount: (fn: () => void) => void
+    queueChildUpdate: <PropsT extends ComponentPropsBase = ComponentPropsBase>(
+      element: Element<PropsT>
+    ) => void
+    queueMount: <PropsT extends ComponentPropsBase = ComponentPropsBase>(
+      element: Element<PropsT>
+    ) => void
+    queuePostMount: <PropsT extends ComponentPropsBase = ComponentPropsBase>(
+      element: Element<PropsT>
+    ) => void
+    queueDestruction: <PropsT extends ComponentPropsBase = ComponentPropsBase>(
+      element: Element<PropsT>
+    ) => void
   }
   type RenderableChild = ElementDescriptor | string | number
   type Child =
@@ -121,18 +136,12 @@ import { HtmlAttribute } from './html-attributes'
   > &
     Partial<KaikuHtmlTagProps>
 
-  const enum ElementDescriptorType {
-    HtmlTag,
-    FunctionComponent,
-    ClassComponent,
-  }
-
-  const enum ElementType {
-    HtmlTag,
-    FunctionComponent,
-    ClassComponent,
-    TextNode,
-  }
+  const HtmlTagTag = 0
+  const FunctionComponentTag = 1
+  const ClassComponentTag = 2
+  const TextNodeTag = 3
+  const LazyUpdateTag = 4
+  const EffectTag = 5
 
   type ElementDescriptor<
     PropsT extends ComponentPropsBase = ComponentPropsBase
@@ -144,8 +153,8 @@ import { HtmlAttribute } from './html-attributes'
   type TagName = keyof HTMLElementTagNameMap
 
   type HtmlTagDescriptor = {
-    type_: ElementDescriptorType.HtmlTag
-    tag_: TagName
+    tag_: typeof HtmlTagTag
+    tagName_: TagName
     existingElement?: HTMLElement
     props: HtmlTagProps
     children_: Children
@@ -156,7 +165,7 @@ import { HtmlAttribute } from './html-attributes'
   type ClassComponentDescriptor<
     PropsT extends ComponentPropsBase = ComponentPropsBase
   > = {
-    type_: ElementDescriptorType.ClassComponent
+    tag_: typeof ClassComponentTag
     class_: ClassComponentType<PropsT>
     props: PropsT
     children_: Children
@@ -164,27 +173,38 @@ import { HtmlAttribute } from './html-attributes'
 
   type ClassComponent<PropsT extends ComponentPropsBase = ComponentPropsBase> =
     {
-      type_: ElementType.ClassComponent
+      tag_: typeof ClassComponentTag
+      key: ChildKey
+      context: KaikuContext<{}>
+      parentHtmlTag: HtmlTag
+      instance: Component<PropsT>
       class_: ClassComponentType<PropsT>
-      el: ElementGetter
-      update_: (nextProps: PropsT) => void
-      destroy: () => void
+      dependencies: Set<StateKey>
+      currentLeaf: Element | null
+      currentProps: PropsT
+      nextLeafDescriptor: ElementDescriptor | null
+      previousLeafElement: HTMLElement | Text | null
     }
 
-  type ElementGetter = () => HTMLElement
-
   type HtmlTag = {
-    type_: ElementType.HtmlTag
-    tag_: TagName
-    el: ElementGetter
-    update_: (nextProps: HtmlTagProps, children_: Children) => void
-    destroy: () => void
+    tag_: typeof HtmlTagTag
+    tagName_: TagName
+    context: KaikuContext<{}>
+    element_: HTMLElement
+    currentChildren: Map<ChildKey, ChildElement>
+    currentKeys: ChildKey[]
+    currentProps: HtmlTagProps
+    nextChildren: Children | null
+    nextKeys: ChildKey[] | null
+    deadChildren: ChildElement[]
+    preservedElements: Set<ChildKey> | null
+    lazyUpdates: LazyUpdate<any>[]
   }
 
   type FunctionComponentDescriptor<
     PropsT extends ComponentPropsBase = ComponentPropsBase
   > = {
-    type_: ElementDescriptorType.FunctionComponent
+    tag_: typeof FunctionComponentTag
     componentFn: FunctionComponentFunction<PropsT>
     props: PropsT
     children_: Children
@@ -193,11 +213,19 @@ import { HtmlAttribute } from './html-attributes'
   type FunctionComponent<
     PropsT extends ComponentPropsBase = ComponentPropsBase
   > = {
-    type_: ElementType.FunctionComponent
+    id: FunctionComponentId
+    context: KaikuContext<{}>
+    descriptor: FunctionComponentDescriptor<PropsT>
+    key: ChildKey
+    // TODO: Change from Remount to Parent
+    parentHtmlTag: HtmlTag
+    tag_: typeof FunctionComponentTag
     componentFn: FunctionComponentFunction<PropsT>
-    el: ElementGetter
-    update_: (nextProps: PropsT) => void
-    destroy: () => void
+    dependencies: Set<StateKey>
+    currentLeaf: Element | null
+    currentProps: PropsT
+    nextLeafDescriptor: ElementDescriptor | null
+    previousLeafElement: HTMLElement | Text | null
   }
 
   type Element<PropsT extends ComponentPropsBase = ComponentPropsBase> =
@@ -205,7 +233,7 @@ import { HtmlAttribute } from './html-attributes'
     | FunctionComponent<PropsT>
     | ClassComponent<PropsT>
 
-  type ChildElement = Element | { type_: ElementType.TextNode; node: Text }
+  type ChildElement = Element | { tag_: typeof TextNodeTag; node: Text }
 
   const unionOfKeys = <A extends object, B extends object>(
     a: A,
@@ -287,33 +315,48 @@ import { HtmlAttribute } from './html-attributes'
 
   type StateKey = string & { __: 'StateKey' }
 
+  const updateDependee = (dependee: Dependee) => {
+    switch (dependee.tag_) {
+      case FunctionComponentTag:
+        return updateFunctionComponent(dependee)
+      case ClassComponentTag:
+        return updateClassComponent(dependee)
+      case EffectTag:
+        return runEffect(dependee)
+      case LazyUpdateTag:
+        return runLazyUpdate(dependee)
+    }
+  }
+
   const createState = <StateT extends object>(
     initialState: StateT
   ): State<StateT> => {
     let nextObjectId = 0
     const trackedDependencyStack: Set<StateKey>[] = []
-    let dependencyMap = new Map<StateKey, Set<Function>>()
-    let deferredUpdates = new Set<Function>()
-    let deferredUpdateQueued = false
+    const dependencyMap = new Map<StateKey, Set<Dependee>>()
+    let updatedDependencies: StateKey[] = []
+
+    // We don't want to run `deferredUpdate` on initialization,
+    // so mark it as queued. This will be reset once initialization is done.
+    let deferredUpdateQueued = true
+
+    const updatedDependees = new Set<Dependee>()
 
     const deferredUpdate = () => {
       deferredUpdateQueued = false
 
-      for (const callback of deferredUpdates) {
-        const size = deferredUpdates.size
-        callback()
+      for (let key; (key = updatedDependencies.pop()); ) {
+        const dependees = dependencyMap.get(key)
+        if (!dependees) continue
 
-        if (__DEBUG__) {
-          assert(
-            size >= deferredUpdates.size,
-            'deferredUpdate(): Side-effects detected in a dependency callback. Ensure all your components have no side-effects in them.'
-          )
-
-          deferredUpdates.delete(callback)
+        for (const dependee of dependees) {
+          if (updatedDependees.has(dependee)) continue
+          updateDependee(dependee)
+          updatedDependees.add(dependee)
         }
       }
 
-      deferredUpdates.clear()
+      updatedDependees.clear()
     }
 
     const reusedReturnTuple: any[] = []
@@ -333,22 +376,15 @@ import { HtmlAttribute } from './html-attributes'
       return ret
     }
 
-    const removeDependencies = (
-      dependencies: Set<StateKey>,
-      callback: Function
-    ) => {
-      // TODO: Not sure if the necessity of adding this counts as a bug
-      // or not.
-      deferredUpdates.delete(callback)
+    const removeDependencies = (keys: Set<StateKey>, dependee: Dependee) => {
+      for (const key of keys) {
+        let dependees = dependencyMap.get(key)
+        if (!dependees) continue
+        dependees.delete(dependee)
 
-      for (const depKey of dependencies) {
-        const deps = dependencyMap.get(depKey)
-        if (deps) {
-          deps.delete(callback)
-          if (deps.size === 0) {
-            setPool.free(deps)
-            dependencyMap.delete(depKey)
-          }
+        if (dependees.size === 0) {
+          setPool.free(dependees)
+          dependencyMap.delete(key)
         }
       }
     }
@@ -358,30 +394,32 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     const updateDependencies = (
-      prevDependencies: Set<StateKey>,
-      nextDependencies: Set<StateKey>,
-      callback: Function
+      prevKeys: Set<StateKey>,
+      nextKeys: Set<StateKey>,
+      dependee: Dependee
     ) => {
-      for (const depKey of nextDependencies) {
-        if (!prevDependencies.has(depKey)) {
-          const deps = dependencyMap.get(depKey)
-          if (deps) {
-            deps.add(callback)
-          } else {
-            dependencyMap.set(depKey, setPool.allocate([callback]))
+      for (const key of nextKeys) {
+        if (!prevKeys.has(key)) {
+          let dependees = dependencyMap.get(key)
+
+          if (!dependees) {
+            dependees = setPool.allocate()
+            dependencyMap.set(key, dependees)
           }
+
+          dependees.add(dependee)
         }
       }
 
-      for (const depKey of prevDependencies) {
-        if (!nextDependencies.has(depKey)) {
-          const deps = dependencyMap.get(depKey)
-          if (deps) {
-            deps.delete(callback)
-            if (deps.size === 0) {
-              setPool.free(deps)
-              dependencyMap.delete(depKey)
-            }
+      for (const key of prevKeys) {
+        if (!nextKeys.has(key)) {
+          const dependees = dependencyMap.get(key)
+          assert(dependees)
+          dependees.delete(dependee)
+
+          if (dependees.size === 0) {
+            setPool.free(dependees)
+            dependencyMap.delete(key)
           }
         }
       }
@@ -452,16 +490,10 @@ import { HtmlAttribute } from './html-attributes'
           }
 
           const dependencyKey = (id + '.' + key) as StateKey
-          const callbacks = dependencyMap.get(dependencyKey)
-          if (callbacks) {
-            if (!deferredUpdateQueued) {
-              deferredUpdateQueued = true
-              window.queueMicrotask(deferredUpdate)
-            }
-
-            for (const callback of callbacks) {
-              deferredUpdates.add(callback)
-            }
+          updatedDependencies.push(dependencyKey)
+          if (!deferredUpdateQueued) {
+            deferredUpdateQueued = true
+            window.queueMicrotask(deferredUpdate)
           }
 
           return true
@@ -477,7 +509,12 @@ import { HtmlAttribute } from './html-attributes'
       return proxy as State<T>
     }
 
-    return wrap(initialState)
+    const state = wrap(initialState)
+    deferredUpdateQueued = false
+    // Clear keys, since everything was touched at init
+    updatedDependencies = []
+
+    return state
   }
 
   type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
@@ -512,9 +549,10 @@ import { HtmlAttribute } from './html-attributes'
   const componentsThatHaveUpdatedAtLeastOnce = new Set<FunctionComponentId>()
 
   type Effect = {
+    tag_: typeof EffectTag
     state_: State<object>
     dependencies: Set<StateKey>
-    callback: () => void
+    fn: () => void
   }
 
   const startHookTracking = (
@@ -547,10 +585,21 @@ import { HtmlAttribute } from './html-attributes'
     effects.delete(componentId)
 
     for (const effect of componentEffects) {
-      effect.state_[REMOVE_DEPENDENCIES](effect.dependencies, effect.callback)
+      effect.state_[REMOVE_DEPENDENCIES](effect.dependencies, effect)
       effect.dependencies.clear()
       setPool.free(effect.dependencies)
     }
+  }
+
+  const runEffect = (eff: Effect) => {
+    const { state_ } = eff
+    const [nextDependencies] = state_[TRACKED_EXECUTE](eff.fn)
+    state_[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, eff)
+
+    eff.dependencies.clear()
+    setPool.free(eff.dependencies)
+
+    eff.dependencies = nextDependencies
   }
 
   const useEffect = (fn: () => void) => {
@@ -564,23 +613,14 @@ import { HtmlAttribute } from './html-attributes'
     const state = stateStack[stateStack.length - 1] as State<object> | undefined
     assert(state)
 
-    const run = () => {
-      const [nextDependencies] = state[TRACKED_EXECUTE](fn)
-      state[UPDATE_DEPENDENCIES](eff.dependencies, nextDependencies, run)
-
-      eff.dependencies.clear()
-      setPool.free(eff.dependencies)
-
-      eff.dependencies = nextDependencies
-    }
-
     const eff: Effect = {
+      tag_: EffectTag,
       state_: state,
       dependencies: setPool.allocate(),
-      callback: run,
+      fn,
     }
 
-    run()
+    runEffect(eff)
 
     let componentEffects = effects.get(componentId)
     if (!componentEffects) {
@@ -640,7 +680,7 @@ import { HtmlAttribute } from './html-attributes'
     children_: Children
   ): ClassComponentDescriptor<PropsT> => {
     return {
-      type_: ElementDescriptorType.ClassComponent,
+      tag_: ClassComponentTag,
       class_: component,
       props,
       children_,
@@ -651,7 +691,7 @@ import { HtmlAttribute } from './html-attributes'
     descriptor: ClassComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>,
     key: ChildKey,
-    remount: Remount
+    parentHtmlTag: HtmlTag
   ): ClassComponent<PropsT> => {
     const instance = new descriptor.class_(descriptor.props)
     instance.render = instance.render.bind(instance)
@@ -659,127 +699,125 @@ import { HtmlAttribute } from './html-attributes'
     instance.componentDidMount = instance.componentDidMount.bind(instance)
     instance.componentDidUpdate = instance.componentDidUpdate.bind(instance)
 
-    // Only used for debugging, don't rely on this. It should be dropped
-    // in production builds.
-    let destroyed = false
-
-    let dependencies = setPool.allocate<StateKey>()
-    let currentLeaf: Element | null = null
-    let currentProps: PropsT = descriptor.props
-    let nextLeafDescriptor: ElementDescriptor | null = null
-
-    let previousLeafEl: HTMLElement | null = null
-
-    const update_ = (nextProps: PropsT = currentProps) => {
-      assert(!destroyed, 'update() called even after component was destroyed')
-
-      if (nextProps !== currentProps) {
-        const properties = unionOfKeys(nextProps, currentProps)
-
-        let unchanged = true
-        for (const property of properties) {
-          if (nextProps[property] !== currentProps[property]) {
-            unchanged = false
-            break
-          }
-        }
-
-        if (unchanged) {
-          currentProps = nextProps
-          return
-        }
-
-        if ('ref' in nextProps) {
-          nextProps.ref!.current = instance
-        }
-      }
-
-      const [nextDependencies, leafDescriptor] = context.state_[
-        TRACKED_EXECUTE
-      ](instance.render, nextProps)
-
-      nextLeafDescriptor = leafDescriptor
-      context.state_[UPDATE_DEPENDENCIES](
-        dependencies,
-        nextDependencies,
-        update_
-      )
-
-      dependencies.clear()
-      setPool.free(dependencies)
-      dependencies = nextDependencies
-      currentProps = nextProps
-
-      context.queueUpdate(updateLeaf)
-    }
-
-    const remountSelf = () => {
-      assert(previousLeafEl)
-      assert(currentLeaf)
-      remount(key, previousLeafEl, currentLeaf.el())
-      if (__DEBUG__) {
-        previousLeafEl = null
-      }
-    }
-
-    const updateLeaf = () => {
-      assert(nextLeafDescriptor)
-      const wasReused =
-        currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
-
-      if (wasReused) {
-        context.queuePostMount(instance.componentDidUpdate)
-        return
-      }
-
-      if (!currentLeaf) {
-        currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
-        context.queuePostMount(instance.componentDidMount)
-        return
-      }
-
-      // Destroy and remount the leaf if it was not reused and
-      // this is not the initialization run
-      previousLeafEl = currentLeaf.el()
-      currentLeaf.destroy()
-      currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
-      context.queueMount(remountSelf)
-      context.queuePostMount(instance.componentDidUpdate)
-    }
-
-    const destroy = () => {
-      instance.componentWillUnmount()
-
-      assert(currentLeaf)
-      assert(effects)
-
-      // This `if` is to ensure the `destroyed` flag is dropped in
-      // production builds.
-      if (__DEBUG__) {
-        assert(!destroyed)
-        destroyed = true
-      }
-
-      currentLeaf.destroy()
-      context.state_[REMOVE_DEPENDENCIES](dependencies, update_)
-      dependencies.clear()
-      setPool.free(dependencies)
-    }
-
-    update_()
-
-    const el = () => {
-      assert(currentLeaf)
-      return currentLeaf.el()
-    }
-
-    return {
-      type_: ElementType.ClassComponent,
+    const component: ClassComponent<PropsT> = {
+      tag_: ClassComponentTag,
+      context,
+      key,
+      parentHtmlTag,
+      instance,
       class_: descriptor.class_,
-      el,
-      update_,
-      destroy,
+      dependencies: setPool.allocate<StateKey>(),
+      currentLeaf: null,
+      currentProps: descriptor.props,
+      nextLeafDescriptor: null,
+      previousLeafElement: null,
     }
+
+    updateClassComponent(component)
+
+    return component
+  }
+
+  const updateClassComponent = <PropsT extends ComponentPropsBase>(
+    component: ClassComponent<PropsT>,
+    nextProps: PropsT = component.currentProps
+  ) => {
+    const { currentProps, instance, context, dependencies } = component
+
+    if (nextProps !== currentProps) {
+      const properties = unionOfKeys(nextProps, currentProps)
+
+      let unchanged = true
+      for (const property of properties) {
+        if (nextProps[property] !== currentProps[property]) {
+          unchanged = false
+          break
+        }
+      }
+
+      if (unchanged) {
+        component.currentProps = nextProps
+        return
+      }
+
+      if ('ref' in nextProps) {
+        nextProps.ref!.current = instance
+      }
+    }
+
+    const [nextDependencies, leafDescriptor] = context.state_[TRACKED_EXECUTE](
+      instance.render,
+      nextProps
+    )
+
+    component.nextLeafDescriptor = leafDescriptor
+    context.state_[UPDATE_DEPENDENCIES](
+      dependencies,
+      nextDependencies,
+      component
+    )
+
+    dependencies.clear()
+    setPool.free(dependencies)
+    component.dependencies = nextDependencies
+    component.currentProps = nextProps
+
+    context.queueChildUpdate(component)
+  }
+
+  const updateClassComponentLeaf = <PropsT>(
+    component: ClassComponent<PropsT>
+  ) => {
+    const { nextLeafDescriptor, currentLeaf, context, key, parentHtmlTag } =
+      component
+
+    assert(nextLeafDescriptor)
+    const wasReused =
+      currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
+
+    if (wasReused) {
+      context.queuePostMount(component)
+      return
+    }
+
+    if (!currentLeaf) {
+      component.currentLeaf = createElement(
+        nextLeafDescriptor,
+        context,
+        key,
+        parentHtmlTag
+      )
+      context.queuePostMount(component)
+      return
+    }
+
+    // Destroy and remount the leaf if it was not reused and
+    // this is not the initialization run
+    component.previousLeafElement = getNodeOfElement(currentLeaf)
+    component.currentLeaf = createElement(
+      nextLeafDescriptor,
+      context,
+      key,
+      parentHtmlTag
+    )
+
+    context.queueMount(component)
+    context.queuePostMount(component)
+    context.queueDestruction(currentLeaf)
+  }
+
+  const destroyClassComponent = <PropsT>(component: ClassComponent<PropsT>) => {
+    const { instance, currentLeaf, context, dependencies } = component
+    instance.componentWillUnmount()
+
+    assert(currentLeaf)
+    assert(effects)
+
+    context.queueDestruction(currentLeaf)
+
+    context.state_[REMOVE_DEPENDENCIES](dependencies, component)
+    dependencies.clear()
+    setPool.free(dependencies)
   }
 
   // FunctionComponents and HTML rendering
@@ -791,7 +829,7 @@ import { HtmlAttribute } from './html-attributes'
     children_: Children
   ): FunctionComponentDescriptor<PropsT> => {
     return {
-      type_: ElementDescriptorType.FunctionComponent,
+      tag_: FunctionComponentTag,
       componentFn: component,
       props,
       children_,
@@ -800,141 +838,142 @@ import { HtmlAttribute } from './html-attributes'
 
   const emptyObject = {}
 
+  const updateFunctionComponent = <PropsT>(
+    component: FunctionComponent<PropsT>,
+    nextProps: PropsT = component.currentProps
+  ) => {
+    const { currentProps, id, context, descriptor, dependencies } = component
+
+    if (nextProps !== currentProps) {
+      const properties = unionOfKeys(
+        nextProps || emptyObject,
+        currentProps || emptyObject
+      )
+
+      let unchanged = true
+      for (const property of properties) {
+        if (nextProps[property] !== currentProps[property]) {
+          unchanged = false
+          break
+        }
+      }
+
+      if (unchanged) {
+        component.currentProps = nextProps
+        return
+      }
+    }
+
+    startHookTracking(id, context.state_)
+    const [nextDependencies, leafDescriptor] = context.state_[TRACKED_EXECUTE](
+      descriptor.componentFn,
+      nextProps
+    )
+    stopHookTracking()
+
+    component.nextLeafDescriptor = leafDescriptor
+    context.state_[UPDATE_DEPENDENCIES](
+      dependencies,
+      nextDependencies,
+      component
+    )
+
+    dependencies.clear()
+    setPool.free(dependencies)
+    component.dependencies = nextDependencies
+    component.currentProps = nextProps
+
+    context.queueChildUpdate(component)
+  }
+
+  const updateFunctionComponentLeaf = <PropsT extends ComponentPropsBase>(
+    component: FunctionComponent<PropsT>
+  ) => {
+    const { context, key, parentHtmlTag, nextLeafDescriptor, currentLeaf } =
+      component
+
+    assert(nextLeafDescriptor)
+    const wasReused =
+      currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
+
+    if (wasReused) return
+
+    if (!currentLeaf) {
+      component.currentLeaf = createElement(
+        nextLeafDescriptor,
+        context,
+        key,
+        parentHtmlTag
+      )
+      return
+    }
+
+    // Destroy and remount the leaf if it was not reused and
+    // this is not the initialization run
+    component.previousLeafElement = getNodeOfElement(currentLeaf)
+    component.currentLeaf = createElement(
+      nextLeafDescriptor,
+      context,
+      key,
+      parentHtmlTag
+    )
+    context.queueDestruction(currentLeaf)
+    context.queueMount(component)
+  }
+
+  const destroyFunctionComponent = <PropsT>(
+    component: FunctionComponent<PropsT>
+  ) => {
+    const { id, currentLeaf, context, dependencies } = component
+
+    assert(currentLeaf)
+
+    destroyHooks(id)
+
+    context.queueDestruction(currentLeaf)
+
+    context.state_[REMOVE_DEPENDENCIES](dependencies, component)
+    dependencies.clear()
+    setPool.free(dependencies)
+  }
+
   const createFunctionComponent = <PropsT, StateT>(
     descriptor: FunctionComponentDescriptor<PropsT>,
     context: KaikuContext<StateT>,
     key: ChildKey,
-    remount: Remount
+    parentHtmlTag: HtmlTag
   ): FunctionComponent<PropsT> => {
     const id: FunctionComponentId =
       ++nextFunctionComponentId as FunctionComponentId
 
-    // Only used for debugging, don't rely on this. It should be dropped
-    // in production builds.
-    let destroyed = false
-
-    let dependencies = setPool.allocate<StateKey>()
-    let currentLeaf: Element | null = null
-    let currentProps: PropsT = descriptor.props
-    let nextLeafDescriptor: ElementDescriptor | null = null
-
-    let previousLeafEl: HTMLElement | null = null
-
-    const update_ = (nextProps: PropsT = currentProps) => {
-      assert(!destroyed, 'update() called even after component was destroyed')
-
-      if (nextProps !== currentProps) {
-        const properties = unionOfKeys(
-          nextProps || emptyObject,
-          currentProps || emptyObject
-        )
-
-        let unchanged = true
-        for (const property of properties) {
-          if (nextProps[property] !== currentProps[property]) {
-            unchanged = false
-            break
-          }
-        }
-
-        if (unchanged) {
-          currentProps = nextProps
-          return
-        }
-      }
-
-      startHookTracking(id, context.state_)
-      const [nextDependencies, leafDescriptor] = context.state_[
-        TRACKED_EXECUTE
-      ](descriptor.componentFn, nextProps)
-      stopHookTracking()
-
-      nextLeafDescriptor = leafDescriptor
-      context.state_[UPDATE_DEPENDENCIES](
-        dependencies,
-        nextDependencies,
-        update_
-      )
-
-      dependencies.clear()
-      setPool.free(dependencies)
-      dependencies = nextDependencies
-      currentProps = nextProps
-
-      context.queueUpdate(updateLeaf)
-    }
-
-    const remountSelf = () => {
-      assert(previousLeafEl)
-      assert(currentLeaf)
-      remount(key, previousLeafEl, currentLeaf.el())
-      if (__DEBUG__) {
-        previousLeafEl = null
-      }
-    }
-
-    const updateLeaf = () => {
-      assert(nextLeafDescriptor)
-      const wasReused =
-        currentLeaf && reuseChildElement(currentLeaf, nextLeafDescriptor)
-
-      if (wasReused) return
-
-      if (!currentLeaf) {
-        currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
-        return
-      }
-
-      // Destroy and remount the leaf if it was not reused and
-      // this is not the initialization run
-      previousLeafEl = currentLeaf.el()
-      currentLeaf.destroy()
-      currentLeaf = createElement(nextLeafDescriptor, context, key, remount)
-      context.queueMount(remountSelf)
-    }
-
-    const destroy = () => {
-      assert(currentLeaf)
-      assert(effects)
-
-      // This `if` is to ensure the `destroyed` flag is dropped in
-      // production builds.
-      if (__DEBUG__) {
-        assert(!destroyed)
-        destroyed = true
-      }
-
-      destroyHooks(id)
-      currentLeaf.destroy()
-      context.state_[REMOVE_DEPENDENCIES](dependencies, update_)
-      dependencies.clear()
-      setPool.free(dependencies)
-    }
-
-    update_()
-
-    const el = () => {
-      assert(currentLeaf)
-      return currentLeaf.el()
-    }
-
-    return {
-      type_: ElementType.FunctionComponent,
+    const component: FunctionComponent<PropsT> = {
+      id,
+      context,
+      descriptor,
+      key,
+      parentHtmlTag,
+      tag_: FunctionComponentTag,
       componentFn: descriptor.componentFn,
-      el,
-      update_,
-      destroy,
+      dependencies: setPool.allocate<StateKey>(),
+      currentLeaf: null,
+      currentProps: descriptor.props,
+      nextLeafDescriptor: null,
+      previousLeafElement: null,
     }
+
+    updateFunctionComponent(component)
+
+    return component
   }
 
   const createHtmlTagDescriptor = (
-    tag_: TagName,
+    tagName: TagName,
     props: HtmlTagProps,
     children_: Children
   ): HtmlTagDescriptor => {
     return {
-      type_: ElementDescriptorType.HtmlTag,
-      tag_,
+      tag_: HtmlTagTag,
+      tagName_: tagName,
       props,
       children_,
     }
@@ -1101,7 +1140,7 @@ import { HtmlAttribute } from './html-attributes'
     nextChild: RenderableChild
   ): boolean => {
     if (typeof nextChild === 'string' || typeof nextChild === 'number') {
-      if (prevChild.type_ === ElementType.TextNode) {
+      if (prevChild.tag_ === TextNodeTag) {
         const value = String(nextChild)
         if (prevChild.node.data !== value) {
           prevChild.node.data = value
@@ -1112,40 +1151,56 @@ import { HtmlAttribute } from './html-attributes'
     }
 
     if (
-      nextChild.type_ === ElementDescriptorType.HtmlTag &&
-      prevChild.type_ === ElementType.HtmlTag &&
-      nextChild.tag_ === prevChild.tag_
+      nextChild.tag_ === HtmlTagTag &&
+      prevChild.tag_ === HtmlTagTag &&
+      nextChild.tagName_ === prevChild.tagName_
     ) {
-      prevChild.update_(nextChild.props, nextChild.children_)
+      updateHtmlTag(prevChild, nextChild.props, nextChild.children_)
+
       return true
     }
 
     if (
-      nextChild.type_ === ElementDescriptorType.FunctionComponent &&
-      prevChild.type_ === ElementType.FunctionComponent &&
+      nextChild.tag_ === FunctionComponentTag &&
+      prevChild.tag_ === FunctionComponentTag &&
       nextChild.componentFn === prevChild.componentFn
     ) {
-      prevChild.update_(nextChild.props)
+      updateFunctionComponent(prevChild, nextChild.props)
       return true
     }
 
     if (
-      nextChild.type_ === ElementDescriptorType.ClassComponent &&
-      prevChild.type_ === ElementType.ClassComponent &&
+      nextChild.tag_ === ClassComponentTag &&
+      prevChild.tag_ === ClassComponentTag &&
       nextChild.class_ === prevChild.class_
     ) {
-      prevChild.update_(nextChild.props)
+      updateClassComponent(prevChild, nextChild.props)
       return true
     }
 
     return false
   }
 
-  const getNodeOfChildElement = (child: ChildElement): HTMLElement | Text =>
-    child.type_ === ElementType.TextNode ? child.node : child.el()
+  const getNodeOfElement = (child: ChildElement): HTMLElement | Text => {
+    if (child.tag_ === TextNodeTag) {
+      return child.node
+    }
 
-  type LazyUpdate = {
-    callback: () => void
+    let element = child
+    while (element.tag_ !== HtmlTagTag) {
+      assert(element.currentLeaf)
+      element = element.currentLeaf
+    }
+
+    return element.element_
+  }
+
+  type LazyUpdate<T> = {
+    tag_: typeof LazyUpdateTag
+    context: KaikuContext<{}>
+    prop: () => T
+    handler: (value: T) => void
+    lastValue: T | undefined
     dependencies: Set<StateKey>
   }
 
@@ -1155,426 +1210,453 @@ import { HtmlAttribute } from './html-attributes'
 
   type ChildKey = string & { __: 'ChildKey' }
 
-  type Remount = (
-    key: ChildKey,
-    prevEl: HTMLElement,
-    nextEl: HTMLElement
-  ) => void
+  const runLazyUpdate = <T>(lazyUpdate: LazyUpdate<T>) => {
+    const { context, prop, handler, lastValue } = lazyUpdate
+
+    const [nextDependencies, value] = context.state_[TRACKED_EXECUTE](prop)
+    context.state_[UPDATE_DEPENDENCIES](
+      lazyUpdate.dependencies,
+      nextDependencies,
+      lazyUpdate
+    )
+    lazyUpdate.dependencies.clear()
+    setPool.free(lazyUpdate.dependencies)
+    lazyUpdate.dependencies = nextDependencies
+    if (value !== lastValue) {
+      lazyUpdate.lastValue = value
+      handler(value)
+    }
+  }
+
+  const lazy = <T>(
+    htmlTag: HtmlTag,
+    prop: LazyProperty<T>,
+    handler: (value: T) => void
+  ) => {
+    const { context, lazyUpdates } = htmlTag
+    if (typeof prop !== 'function') {
+      handler(prop)
+      return
+    }
+
+    const lazyUpdate: LazyUpdate<T> = {
+      tag_: LazyUpdateTag,
+      dependencies: setPool.allocate(),
+      lastValue: undefined,
+      prop: prop as () => T,
+      handler,
+      context,
+    }
+
+    runLazyUpdate(lazyUpdate)
+
+    if (lazyUpdate.dependencies.size === 0) {
+      setPool.free(lazyUpdate.dependencies)
+      return
+    }
+
+    lazyUpdates.push(lazyUpdate)
+  }
+
+  const destroyLazyUpdates = (htmlTag: HtmlTag) => {
+    const { context, lazyUpdates } = htmlTag
+
+    for (let lazyUpdate; (lazyUpdate = lazyUpdates.pop()); ) {
+      context.state_[REMOVE_DEPENDENCIES](lazyUpdate.dependencies, lazyUpdate)
+      lazyUpdate.dependencies.clear()
+      setPool.free(lazyUpdate.dependencies)
+    }
+  }
+
+  const updateHtmlTag = (
+    htmlTag: HtmlTag,
+    nextProps: HtmlTagProps,
+    children: Children
+  ) => {
+    const { currentProps, element_, context } = htmlTag
+
+    const keys = unionOfKeys(nextProps, currentProps)
+
+    // TODO: Don't destroy these every single time. Make it smart.
+    destroyLazyUpdates(htmlTag)
+
+    for (const key of keys) {
+      // TODO: Special case access to style and classsnames
+      if (currentProps[key] === nextProps[key]) continue
+      if (key === 'key') continue
+
+      if (key === 'ref') {
+        nextProps[key]!.current = element_
+        continue
+      }
+
+      // Probably faster than calling startsWith...
+      const isListener = key[0] === 'o' && key[1] === 'n'
+
+      if (isListener) {
+        const eventName = key.substr(2).toLowerCase()
+
+        if (key in currentProps) {
+          element_.removeEventListener(
+            eventName as any,
+            currentProps[key] as any
+          )
+        }
+
+        if (key in nextProps) {
+          element_.addEventListener(eventName as any, nextProps[key] as any)
+        }
+      } else {
+        switch (key) {
+          case 'style': {
+            const properties = unionOfKeys(
+              nextProps.style || emptyObject,
+              currentProps.style || emptyObject
+            )
+
+            for (const property of properties) {
+              if (
+                nextProps.style?.[property] !== currentProps.style?.[property]
+              ) {
+                lazy(htmlTag, nextProps.style?.[property] ?? '', (value) => {
+                  element_.style[property as any] = value
+                })
+              }
+            }
+            continue
+          }
+          case 'checked': {
+            lazy(htmlTag, nextProps.checked, (value) => {
+              ;(element_ as HTMLInputElement).checked = value as boolean
+            })
+            continue
+          }
+          case 'value': {
+            lazy(htmlTag, nextProps[key] ?? '', (value) => {
+              ;(element_ as HTMLInputElement).value = value
+            })
+            continue
+          }
+          case 'className': {
+            lazy(htmlTag, nextProps[key], (value) => {
+              element_.className = stringifyClassNames(value ?? '')
+            })
+            continue
+          }
+        }
+
+        if (key in nextProps) {
+          lazy(htmlTag, nextProps[key] as LazyProperty<string>, (value) => {
+            element_.setAttribute(key, value)
+          })
+        } else {
+          element_.removeAttribute(key)
+        }
+      }
+    }
+
+    htmlTag.currentProps = nextProps
+    htmlTag.nextChildren = children
+
+    context.queueChildUpdate(htmlTag)
+    context.queueMount(htmlTag)
+  }
+
+  const flattenChildren = (children: Children, prefix = '') => {
+    const flattenedChildren = new Map<ChildKey, RenderableChild>()
+
+    if (__DEBUG__) {
+      assert(reusedPrefixStack.length === 0)
+      assert(reusedChildrenStack.length === 0)
+      assert(reusedIndexStack.length === 0)
+    }
+
+    reusedPrefixStack.push(prefix)
+    reusedChildrenStack.push(children)
+    reusedIndexStack.push(0)
+
+    for (let top = 0; top >= 0; reusedIndexStack[top]++) {
+      const i = reusedIndexStack[top]
+      const children = reusedChildrenStack[top]
+      const keyPrefix = reusedPrefixStack[top]
+
+      if (i == children.length) {
+        reusedPrefixStack.pop()
+        reusedChildrenStack.pop()
+        reusedIndexStack.pop()
+
+        top--
+        continue
+      }
+
+      const child = children[i]
+
+      if (
+        child === null ||
+        typeof child === 'boolean' ||
+        typeof child === 'undefined'
+      ) {
+        continue
+      }
+
+      if (typeof child === 'string' || typeof child === 'number') {
+        const key = (keyPrefix + i) as ChildKey
+        flattenedChildren.set(key, child)
+        continue
+      }
+
+      if (typeof child === 'function') {
+        const key = (keyPrefix + i) as ChildKey
+        flattenedChildren.set(key, h(child, null))
+        continue
+      }
+
+      if (Array.isArray(child)) {
+        top++
+        reusedPrefixStack.push(keyPrefix + i + '.')
+        reusedChildrenStack.push(child)
+
+        // This needs to start from -1 as it gets incremented once after
+        // the continue statement
+        reusedIndexStack.push(-1)
+        continue
+      }
+      const key = (keyPrefix +
+        (typeof child.props.key !== 'undefined'
+          ? '\u9375' + child.props.key
+          : i)) as ChildKey
+      flattenedChildren.set(key, child)
+    }
+
+    if (__DEBUG__) {
+      assert(reusedPrefixStack.length === 0)
+      assert(reusedChildrenStack.length === 0)
+      assert(reusedIndexStack.length === 0)
+    }
+
+    return flattenedChildren
+  }
+
+  const updateHtmlTagChildren = (htmlTag: HtmlTag) => {
+    const {
+      nextChildren,
+      deadChildren,
+      currentChildren,
+      currentKeys,
+      context,
+    } = htmlTag
+
+    assert(nextChildren)
+    assert(deadChildren.length === 0)
+
+    const flattenedChildren = flattenChildren(nextChildren)
+
+    const nextKeysIterator = flattenedChildren.keys()
+    htmlTag.nextKeys = Array.from(nextKeysIterator) as ChildKey[]
+    htmlTag.preservedElements = setPool.allocate(
+      longestCommonSubsequence(currentKeys, htmlTag.nextKeys)
+    )
+
+    // Check if we can reuse any of the components/elements
+    // in the longest preserved key sequence.
+    for (const key of htmlTag.preservedElements) {
+      const nextChild = flattenedChildren.get(key)
+      const prevChild = currentChildren.get(key)
+
+      assert(typeof nextChild !== 'undefined')
+      assert(prevChild)
+
+      if (!reuseChildElement(prevChild, nextChild)) {
+        // Let's not mark the child as dead yet.
+        // It might be reused in the next loop.
+        htmlTag.preservedElements.delete(key)
+      }
+    }
+
+    // Try to reuse old components/elements which share the key.
+    // If not reused, mark the previous child for destruction
+    // and create a new one in its place.
+    for (const [key, nextChild] of flattenedChildren) {
+      if (htmlTag.preservedElements.has(key)) continue
+
+      const prevChild = currentChildren.get(key)
+
+      if (prevChild && reuseChildElement(prevChild, nextChild)) {
+        continue
+      }
+
+      if (prevChild) {
+        deadChildren.push(prevChild)
+      }
+
+      if (typeof nextChild === 'number' || typeof nextChild === 'string') {
+        const node = document.createTextNode(nextChild as string)
+        currentChildren.set(key, {
+          tag_: TextNodeTag,
+          node,
+        })
+        continue
+      }
+
+      currentChildren.set(key, createElement(nextChild, context, key, htmlTag))
+    }
+
+    // Check which children will not be a part of the next render.
+    // Mark them for destruction and remove from currentChildren.
+    for (const [key, child] of currentChildren) {
+      if (!htmlTag.nextKeys.includes(key)) {
+        deadChildren.push(child)
+        currentChildren.delete(key)
+      }
+    }
+  }
+
+  const mountHtmlTagElementChildren = (htmlTag: HtmlTag) => {
+    const {
+      nextKeys,
+      preservedElements,
+      element_,
+      deadChildren,
+      currentChildren,
+      context,
+    } = htmlTag
+
+    assert(nextKeys)
+    assert(preservedElements)
+
+    for (let child; (child = deadChildren.pop()); ) {
+      element_.removeChild(getNodeOfElement(child))
+
+      if (child.tag_ !== TextNodeTag) {
+        context.queueDestruction(child)
+      }
+    }
+
+    // Since DOM operations only allow you to append or insertBefore,
+    // we must start from the end of the keys.
+    for (let i = nextKeys.length - 1; i >= 0; i--) {
+      const key = nextKeys[i]
+      const prevKey = nextKeys[i + 1]
+
+      if (preservedElements.has(key)) continue
+
+      const child = currentChildren.get(key)
+      assert(child)
+      const node = getNodeOfElement(child)
+      if (typeof prevKey === 'undefined') {
+        element_.appendChild(node)
+      } else {
+        const beforeChild = currentChildren.get(prevKey)
+        assert(beforeChild)
+        const beforeNode = getNodeOfElement(beforeChild)
+        element_.insertBefore(node, beforeNode)
+      }
+    }
+
+    htmlTag.currentKeys = nextKeys
+    preservedElements.clear()
+    setPool.free(preservedElements)
+
+    if (__DEBUG__) {
+      assert(deadChildren.length === 0)
+
+      // Ensure these are not reused
+      htmlTag.nextKeys = null
+      htmlTag.preservedElements = null
+    }
+  }
+
+  const remountComponent = <PropsT>(
+    component: FunctionComponent<PropsT> | ClassComponent<PropsT>
+  ) => {
+    const { key, parentHtmlTag, previousLeafElement, currentLeaf } = component
+
+    assert(previousLeafElement)
+    assert(currentLeaf)
+
+    const { element_, currentChildren, currentKeys } = parentHtmlTag
+    const nextElement = getNodeOfElement(currentLeaf)
+
+    const child = currentChildren.get(key)
+    const childIndex = currentKeys.indexOf(key)
+    const prevKey = currentKeys[childIndex - 1]
+    assert(childIndex >= 0)
+    assert(child)
+
+    element_.removeChild(previousLeafElement)
+
+    if (typeof prevKey === 'undefined') {
+      element_.appendChild(nextElement)
+    } else {
+      const beforeChild = currentChildren.get(prevKey)
+      assert(beforeChild)
+      const beforeNode = getNodeOfElement(beforeChild)
+      element_.insertBefore(nextElement, beforeNode)
+    }
+
+    if (__DEBUG__) {
+      component.previousLeafElement = null
+    }
+  }
+
+  const destroyHtmlTag = (htmlTag: HtmlTag) => {
+    const { currentChildren, element_, context } = htmlTag
+    destroyLazyUpdates(htmlTag)
+
+    for (const child of currentChildren.values()) {
+      if (child.tag_ === TextNodeTag) {
+        element_.removeChild(child.node)
+      } else {
+        element_.removeChild(getNodeOfElement(child))
+        context.queueDestruction(child)
+      }
+    }
+  }
 
   const createHtmlTag = <StateT>(
     descriptor: HtmlTagDescriptor,
     context: KaikuContext<StateT>
   ): HtmlTag => {
-    const element = descriptor.existingElement
+    const element_ = descriptor.existingElement
       ? descriptor.existingElement
-      : document.createElement(descriptor.tag_)
+      : document.createElement(descriptor.tagName_)
 
-    let currentChildren: Map<ChildKey, ChildElement> = new Map()
-    let currentKeys: ChildKey[] = []
-    let currentProps: HtmlTagProps = {}
-
-    let nextChildren: Children | null = null
-    let nextKeys: ChildKey[] | null = null
-    let deadChildren: ChildElement[] = []
-    let preservedElements: Set<ChildKey> | null = null
-
-    let lazyUpdates: LazyUpdate[] = []
-
-    const lazy = <T>(prop: LazyProperty<T>, handler: (value: T) => void) => {
-      if (typeof prop !== 'function') {
-        handler(prop)
-        return
-      }
-
-      let lastValue: T | undefined = undefined
-
-      const run = () => {
-        const [nextDependencies, value] = context.state_[TRACKED_EXECUTE](
-          prop as () => T
-        )
-        context.state_[UPDATE_DEPENDENCIES](
-          lazyUpdate.dependencies,
-          nextDependencies,
-          run
-        )
-        lazyUpdate.dependencies.clear()
-        setPool.free(lazyUpdate.dependencies)
-        lazyUpdate.dependencies = nextDependencies
-        if (value !== lastValue) {
-          lastValue = value
-          handler(value)
-        }
-      }
-
-      const lazyUpdate: LazyUpdate = {
-        dependencies: setPool.allocate(),
-        callback: run,
-      }
-
-      run()
-
-      if (lazyUpdate.dependencies.size === 0) {
-        setPool.free(lazyUpdate.dependencies)
-        return
-      }
-
-      lazyUpdates.push(lazyUpdate)
+    const htmlTag: HtmlTag = {
+      tag_: HtmlTagTag,
+      context,
+      tagName_: descriptor.tagName_,
+      element_,
+      currentChildren: new Map(),
+      currentKeys: [],
+      currentProps: {},
+      nextChildren: null,
+      nextKeys: null,
+      deadChildren: [],
+      preservedElements: null,
+      lazyUpdates: [],
     }
 
-    const destroyLazyUpdates = () => {
-      for (let lazyUpdate; (lazyUpdate = lazyUpdates.pop()); ) {
-        context.state_[REMOVE_DEPENDENCIES](
-          lazyUpdate.dependencies,
-          lazyUpdate.callback
-        )
-        lazyUpdate.dependencies.clear()
-        setPool.free(lazyUpdate.dependencies)
-      }
-    }
+    updateHtmlTag(htmlTag, descriptor.props, descriptor.children_)
 
-    const update_ = (nextProps: HtmlTagProps, children: Children) => {
-      const keys = unionOfKeys(nextProps, currentProps)
-
-      destroyLazyUpdates()
-
-      for (const key of keys) {
-        // TODO: Special case access to style and classsnames
-        if (currentProps[key] === nextProps[key]) continue
-        if (key === 'key') continue
-
-        if (key === 'ref') {
-          nextProps[key]!.current = element
-          continue
-        }
-
-        // Probably faster than calling startsWith...
-        const isListener = key[0] === 'o' && key[1] === 'n'
-
-        if (isListener) {
-          const eventName = key.substr(2).toLowerCase()
-
-          if (key in currentProps) {
-            element.removeEventListener(
-              eventName as any,
-              currentProps[key] as any
-            )
-          }
-
-          if (key in nextProps) {
-            element.addEventListener(eventName as any, nextProps[key] as any)
-          }
-        } else {
-          switch (key) {
-            case 'style': {
-              const properties = unionOfKeys(
-                nextProps.style || emptyObject,
-                currentProps.style || emptyObject
-              )
-
-              for (const property of properties) {
-                if (
-                  nextProps.style?.[property] !== currentProps.style?.[property]
-                ) {
-                  lazy(nextProps.style?.[property] ?? '', (value) => {
-                    element.style[property as any] = value
-                  })
-                }
-              }
-              continue
-            }
-            case 'checked': {
-              lazy(nextProps.checked, (value) => {
-                ;(element as HTMLInputElement).checked = value as boolean
-              })
-              continue
-            }
-            case 'value': {
-              lazy(nextProps[key] ?? '', (value) => {
-                ;(element as HTMLInputElement).value = value
-              })
-              continue
-            }
-            case 'className': {
-              lazy(nextProps[key], (value) => {
-                element.className = stringifyClassNames(value ?? '')
-              })
-              continue
-            }
-          }
-
-          if (key in nextProps) {
-            lazy(nextProps[key] as LazyProperty<string>, (value) => {
-              element.setAttribute(key, value)
-            })
-          } else {
-            element.removeAttribute(key)
-          }
-        }
-      }
-
-      currentProps = nextProps
-      nextChildren = children
-
-      context.queueUpdate(updateChildren)
-      context.queueMount(mountChildren)
-    }
-
-    const flattenChildren = (children: Children, prefix = '') => {
-      const flattenedChildren = new Map<ChildKey, RenderableChild>()
-
-      if (__DEBUG__) {
-        assert(reusedPrefixStack.length === 0)
-        assert(reusedChildrenStack.length === 0)
-        assert(reusedIndexStack.length === 0)
-      }
-
-      reusedPrefixStack.push(prefix)
-      reusedChildrenStack.push(children)
-      reusedIndexStack.push(0)
-
-      for (let top = 0; top >= 0; reusedIndexStack[top]++) {
-        const i = reusedIndexStack[top]
-        const children = reusedChildrenStack[top]
-        const keyPrefix = reusedPrefixStack[top]
-
-        if (i == children.length) {
-          reusedPrefixStack.pop()
-          reusedChildrenStack.pop()
-          reusedIndexStack.pop()
-
-          top--
-          continue
-        }
-
-        const child = children[i]
-
-        if (
-          child === null ||
-          typeof child === 'boolean' ||
-          typeof child === 'undefined'
-        ) {
-          continue
-        }
-
-        if (typeof child === 'string' || typeof child === 'number') {
-          const key = (keyPrefix + i) as ChildKey
-          flattenedChildren.set(key, child)
-          continue
-        }
-
-        if (typeof child === 'function') {
-          const key = (keyPrefix + i) as ChildKey
-          flattenedChildren.set(key, h(child, null))
-          continue
-        }
-
-        if (Array.isArray(child)) {
-          top++
-          reusedPrefixStack.push(keyPrefix + i + '.')
-          reusedChildrenStack.push(child)
-
-          // This needs to start from -1 as it gets incremented once after
-          // the continue statement
-          reusedIndexStack.push(-1)
-          continue
-        }
-        const key = (keyPrefix +
-          (typeof child.props.key !== 'undefined'
-            ? '\u9375' + child.props.key
-            : i)) as ChildKey
-        flattenedChildren.set(key, child)
-      }
-
-      if (__DEBUG__) {
-        assert(reusedPrefixStack.length === 0)
-        assert(reusedChildrenStack.length === 0)
-        assert(reusedIndexStack.length === 0)
-      }
-
-      return flattenedChildren
-    }
-
-    const updateChildren = () => {
-      assert(nextChildren)
-      assert(deadChildren.length === 0)
-
-      const flattenedChildren = flattenChildren(nextChildren)
-
-      const nextKeysIterator = flattenedChildren.keys()
-      nextKeys = Array.from(nextKeysIterator) as ChildKey[]
-      preservedElements = setPool.allocate(
-        longestCommonSubsequence(currentKeys, nextKeys)
-      )
-
-      // Check if we can reuse any of the components/elements
-      // in the longest preserved key sequence.
-      for (const key of preservedElements) {
-        const nextChild = flattenedChildren.get(key)
-        const prevChild = currentChildren.get(key)
-
-        assert(typeof nextChild !== 'undefined')
-        assert(prevChild)
-
-        if (!reuseChildElement(prevChild, nextChild)) {
-          // Let's not mark the child as dead yet.
-          // It might be reused in the next loop.
-          preservedElements.delete(key)
-        }
-      }
-
-      // Try to reuse old components/elements which share the key.
-      // If not reused, mark the previous child for destruction
-      // and create a new one in its place.
-      for (const [key, nextChild] of flattenedChildren) {
-        if (preservedElements.has(key)) continue
-
-        const prevChild = currentChildren.get(key)
-
-        if (prevChild && reuseChildElement(prevChild, nextChild)) {
-          continue
-        }
-
-        if (prevChild) {
-          deadChildren.push(prevChild)
-        }
-
-        if (typeof nextChild === 'number' || typeof nextChild === 'string') {
-          const node = document.createTextNode(nextChild as string)
-          currentChildren.set(key, {
-            type_: ElementType.TextNode,
-            node,
-          })
-          continue
-        }
-
-        currentChildren.set(
-          key,
-          createElement(nextChild, context, key, remountChild)
-        )
-      }
-
-      // Check which children will not be a part of the next render.
-      // Mark them for destruction and remove from currentChildren.
-      for (const [key, child] of currentChildren) {
-        if (!nextKeys.includes(key)) {
-          deadChildren.push(child)
-          currentChildren.delete(key)
-        }
-      }
-    }
-
-    const mountChildren = () => {
-      assert(nextKeys)
-      assert(preservedElements)
-
-      for (let child; (child = deadChildren.pop()); ) {
-        if (child.type_ === ElementType.TextNode) {
-          element.removeChild(child.node)
-        } else {
-          element.removeChild(child.el())
-          child.destroy()
-        }
-      }
-
-      // Since DOM operations only allow you to append or insertBefore,
-      // we must start from the end of the keys.
-      for (let i = nextKeys.length - 1; i >= 0; i--) {
-        const key = nextKeys[i]
-        const prevKey = nextKeys[i + 1]
-
-        if (preservedElements.has(key)) continue
-
-        const child = currentChildren.get(key)
-        assert(child)
-        const node = getNodeOfChildElement(child)
-        if (typeof prevKey === 'undefined') {
-          element.appendChild(node)
-        } else {
-          const beforeChild = currentChildren.get(prevKey)
-          assert(beforeChild)
-          const beforeNode = getNodeOfChildElement(beforeChild)
-          element.insertBefore(node, beforeNode)
-        }
-      }
-
-      currentKeys = nextKeys
-      preservedElements.clear()
-      setPool.free(preservedElements)
-
-      if (__DEBUG__) {
-        assert(deadChildren.length === 0)
-
-        // Ensure these are not reused
-        nextKeys = null
-        preservedElements = null
-      }
-    }
-
-    const remountChild: Remount = (
-      key: ChildKey,
-      prevEl: HTMLElement,
-      nextEl: HTMLElement
-    ) => {
-      const child = currentChildren.get(key)
-      const childIndex = currentKeys.indexOf(key)
-      const prevKey = currentKeys[childIndex - 1]
-      assert(childIndex >= 0)
-      assert(child)
-
-      element.removeChild(prevEl)
-
-      if (typeof prevKey === 'undefined') {
-        element.appendChild(nextEl)
-      } else {
-        const beforeChild = currentChildren.get(prevKey)
-        assert(beforeChild)
-        const beforeNode = getNodeOfChildElement(beforeChild)
-        element.insertBefore(nextEl, beforeNode)
-      }
-    }
-
-    const destroy = () => {
-      destroyLazyUpdates()
-
-      for (const child of currentChildren.values()) {
-        if (child.type_ === ElementType.TextNode) {
-          element.removeChild(child.node)
-        } else {
-          element.removeChild(child.el())
-          child.destroy()
-        }
-      }
-    }
-
-    const el = () => element
-
-    update_(descriptor.props, descriptor.children_)
-
-    return {
-      type_: ElementType.HtmlTag,
-      tag_: descriptor.tag_,
-      el,
-      destroy,
-      update_,
-    }
+    return htmlTag
   }
 
   const createElement = <PropsT, StateT>(
     descriptor: ElementDescriptor<PropsT>,
     context: KaikuContext<StateT>,
     key?: ChildKey,
-    remount?: Remount
+    parentHtmlTag?: HtmlTag
   ): Element<PropsT> => {
-    if (descriptor.type_ === ElementDescriptorType.FunctionComponent) {
+    if (descriptor.tag_ === FunctionComponentTag) {
       assert(typeof key !== 'undefined')
-      assert(typeof remount !== 'undefined')
-      return createFunctionComponent(descriptor, context, key, remount)
+      assert(typeof parentHtmlTag !== 'undefined')
+      return createFunctionComponent(descriptor, context, key, parentHtmlTag)
     }
 
-    if (descriptor.type_ === ElementDescriptorType.ClassComponent) {
+    if (descriptor.tag_ === ClassComponentTag) {
       assert(typeof key !== 'undefined')
-      assert(typeof remount !== 'undefined')
-      return createClassComponent(descriptor, context, key, remount)
+      assert(typeof parentHtmlTag !== 'undefined')
+      return createClassComponent(descriptor, context, key, parentHtmlTag)
     }
 
     return createHtmlTag(descriptor, context)
@@ -1625,27 +1707,87 @@ import { HtmlAttribute } from './html-attributes'
     }
   }
 
+  const destroyElement = (element: Element) => {
+    switch (element.tag_) {
+      case ClassComponentTag: {
+        return destroyClassComponent(element)
+      }
+      case FunctionComponentTag: {
+        return destroyFunctionComponent(element)
+      }
+      case HtmlTagTag: {
+        return destroyHtmlTag(element)
+      }
+      default:
+        throw new Error('No destroy function defined')
+    }
+  }
+
+  const updateChild = (element: Element) => {
+    switch (element.tag_) {
+      case ClassComponentTag: {
+        return updateClassComponentLeaf(element)
+      }
+      case FunctionComponentTag: {
+        return updateFunctionComponentLeaf(element)
+      }
+      case HtmlTagTag: {
+        return updateHtmlTagChildren(element)
+      }
+      default:
+        throw new Error('No update function defined for element')
+    }
+  }
+
+  const mountElement = (element: Element) => {
+    switch (element.tag_) {
+      case ClassComponentTag:
+      case FunctionComponentTag: {
+        return remountComponent(element)
+      }
+      case HtmlTagTag: {
+        return mountHtmlTagElementChildren(element)
+      }
+      default:
+        throw new Error('No update function defined for element')
+    }
+  }
+
+  const postMountElement = (element: Element) => {
+    switch (element.tag_) {
+      case ClassComponentTag: {
+        return element.instance.componentDidMount()
+      }
+      default:
+        throw new Error('No update function defined for element')
+    }
+  }
+
   const render = <StateT = object>(
     rootDescriptor: FunctionComponentDescriptor,
     rootElement: HTMLElement,
     state: State<StateT> = createState({}) as State<StateT>
   ) => {
     let currentlyExecutingUpdates = false
-    const updates: (() => void)[] = []
-    const mounts: (() => void)[] = []
-    const postMounts: (() => void)[] = []
+    const childUpdates: Element<any>[] = []
+    const mounts: Element<any>[] = []
+    const postMounts: Element<any>[] = []
+    const destructions: Element<any>[] = []
 
     const executeUpdatesAndMounts = () => {
       currentlyExecutingUpdates = true
 
-      for (let fn; (fn = updates.pop()); ) {
-        fn()
+      for (let element; (element = childUpdates.pop()); ) {
+        updateChild(element)
       }
-      for (let fn; (fn = mounts.pop()); ) {
-        fn()
+      for (let element; (element = mounts.pop()); ) {
+        mountElement(element)
       }
-      for (let fn; (fn = postMounts.pop()); ) {
-        fn()
+      for (let element; (element = postMounts.pop()); ) {
+        postMountElement(element)
+      }
+      for (let element; (element = destructions.pop()); ) {
+        destroyElement(element)
       }
 
       currentlyExecutingUpdates = false
@@ -1653,22 +1795,29 @@ import { HtmlAttribute } from './html-attributes'
 
     const context: KaikuContext<StateT> = {
       state_: state,
-      queueUpdate(fn) {
-        updates.push(fn)
+      queueChildUpdate(element) {
+        childUpdates.push(element)
         if (currentlyExecutingUpdates) {
           return
         }
         executeUpdatesAndMounts()
       },
-      queueMount(fn) {
-        mounts.push(fn)
+      queueMount(element) {
+        mounts.push(element)
         if (currentlyExecutingUpdates) {
           return
         }
         executeUpdatesAndMounts()
       },
-      queuePostMount(fn) {
-        postMounts.push(fn)
+      queuePostMount(element) {
+        postMounts.push(element)
+        if (currentlyExecutingUpdates) {
+          return
+        }
+        executeUpdatesAndMounts()
+      },
+      queueDestruction(element) {
+        destructions.push(element)
         if (currentlyExecutingUpdates) {
           return
         }
@@ -1678,8 +1827,8 @@ import { HtmlAttribute } from './html-attributes'
 
     createHtmlTag(
       {
-        type_: ElementDescriptorType.HtmlTag,
-        tag_: rootElement.tagName as TagName,
+        tag_: HtmlTagTag,
+        tagName_: rootElement.tagName as TagName,
         existingElement: rootElement,
         props: {},
         children_: [rootDescriptor],
