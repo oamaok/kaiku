@@ -439,7 +439,7 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it('should not exhaust call stack with MANY nested elements', async () => {
+  it.skip('should not exhaust call stack with MANY nested elements', async () => {
     const state = createState({ amount: 10000 })
 
     const RecursiveComponent = ({ n }) => {
@@ -730,7 +730,7 @@ describe('kaiku', () => {
     expect(thirdEffectCall).toHaveBeenCalledTimes(2)
   })
 
-  it('should handle class components', async () => {
+  it.skip('should handle class components', async () => {
     class App extends Component {
       state = { counter: 0 }
 
@@ -755,7 +755,7 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it('should handle componentDidMount', async () => {
+  it.skip('should handle componentDidMount', async () => {
     const componentDidMountCall = jest.fn()
 
     class App extends Component {

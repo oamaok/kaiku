@@ -20,7 +20,7 @@ console.log('Build production version')
 console.time(' - time')
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
-  outfile: 'dist/kaiku.min.js',
+  outfile: 'dist/kaiku.js',
   define: {
     __DEBUG__: false,
   },
@@ -30,7 +30,7 @@ console.timeEnd(' - time')
 console.log('Minify production version')
 console.time(' - time')
 terser
-  .minify(fs.readFileSync('dist/kaiku.min.js').toString(), {
+  .minify(fs.readFileSync('dist/kaiku.js').toString(), {
     sourceMap: true,
     compress: {
       passes: 3,
