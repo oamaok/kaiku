@@ -42,7 +42,7 @@
   type HtmlElementTagName = keyof HTMLElementTagNameMap
   type HtmlElementProperties = Record<string, any>
 
-  type NextSibling = HTMLElement | Text | null
+  type NextSibling = HtmlElementInstance | TextInstance
 
   type DefaultProps = Record<string, any>
   type LazyProperty<T> = T | (() => T)
@@ -92,7 +92,7 @@
     props: PropertiesT
     child: NodeInstance<any> | null
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling
+    nextSibling_: NextSibling | null
   }
 
   type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
@@ -102,7 +102,7 @@
     context_: Context<{}>
     props: PropertiesT
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling
+    nextSibling_: NextSibling | null
     child: NodeInstance<any> | null
   }
 
@@ -113,7 +113,7 @@
     children_: NodeInstance<DefaultProps>[]
     childMap: Map<string | number, NodeInstance<DefaultProps>>
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling
+    nextSibling_: NextSibling | null
   }
 
   type HtmlElementInstance = {
@@ -123,7 +123,7 @@
     props: HtmlElementProperties
     context_: Context<{}>
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling
+    nextSibling_: NextSibling | null
     children_: FragmentInstance | null
     lazyUpdates: LazyUpdate<any>[]
   }
@@ -132,7 +132,7 @@
     tag_: typeof TextNodeTag
     element_: Text
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling
+    nextSibling_: NextSibling | null
   }
 
   type NodeInstance<PropertiesT extends DefaultProps> =
@@ -284,7 +284,6 @@
     let nextKeyId = 0
 
     const trackedDependencyStack: Set<StateKey>[] = []
-    // TODO: Use two-way registering
     const dependeeToKeys: Map<Dependee, Set<StateKey>> = new Map()
     const keyToDependees: Map<StateKey, Set<Dependee>> = new Map()
 
@@ -574,7 +573,7 @@
 
   const getFirstChildOfNodeInstance = (
     instance: NodeInstance<DefaultProps>
-  ): HTMLElement | Text | null => {
+  ): NextSibling | null => {
     switch (instance.tag_) {
       case ClassComponentTag:
       case FunctionComponentTag: {
@@ -596,7 +595,7 @@
 
       case TextNodeTag:
       case HtmlElementTag:
-        return instance.element_
+        return instance
     }
   }
 
@@ -657,8 +656,8 @@
       descriptor.tag_ === HtmlElementTag
     ) {
       if (instance.tagName_ !== descriptor.tagName_) {
-        // TODO: Replace tags in-place
-        return false
+        instance.element_.parentElement?.removeChild(instance.element_)
+        repurposeHtmlElementInstance(instance, descriptor)
       }
 
       updateHtmlElementInstance(
@@ -865,8 +864,8 @@
     const wasReused = reuseNodeInstance(instance.child, childDescriptor)
 
     if (!wasReused) {
-      const newChild = createNodeInstance(childDescriptor, instance.context_)
       unmountNodeInstance(instance.child)
+      const newChild = createNodeInstance(childDescriptor, instance.context_)
       instance.child = newChild
     }
 
@@ -944,8 +943,6 @@
         instance.children_.push(existingChild)
       } else {
         if (existingChild) {
-          // TODO: Destroy? Unmount?
-          // unmount until HTML tag?
           unmountNodeInstance(existingChild)
         }
 
@@ -957,7 +954,6 @@
 
     for (const [key, child] of instance.childMap) {
       if (!nextkeys.has(key)) {
-        // TODO: Destroy, unmount
         unmountNodeInstance(child)
         instance.childMap.delete(key)
       }
@@ -1091,6 +1087,24 @@
     return instance
   }
 
+  const repurposeHtmlElementInstance = (
+    instance: HtmlElementInstance,
+    descriptor: HtmlElementDescriptor
+  ) => {
+    const element_ =
+      descriptor.existingElement || document.createElement(descriptor.tagName_)
+
+    instance.tagName_ = descriptor.tagName_
+    instance.element_ = element_
+    instance.parentElement_ = null
+    instance.nextSibling_ = null
+    instance.props = EMPTY_OBJECT
+    instance.children_ = null
+    instance.lazyUpdates = []
+
+    return instance
+  }
+
   const updateHtmlElementInstance = (
     instance: HtmlElementInstance,
     nextProps: HtmlElementProperties,
@@ -1181,7 +1195,7 @@
 
     if (children.length === 0) {
       if (instance.children_) {
-        // TODO: Destroy and unmount
+        unmountNodeInstance(instance.children_)
       }
 
       instance.children_ = null
@@ -1226,7 +1240,7 @@
   const mountNodeInstance = <PropertiesT extends DefaultProps>(
     instance: NodeInstance<PropertiesT>,
     parentElement: HtmlElementInstance,
-    nextSibling: NextSibling
+    nextSibling: NextSibling | null
   ) => {
     switch (instance.tag_) {
       case ClassComponentTag:
@@ -1263,7 +1277,10 @@
         if (!nextSibling) {
           parentElement.element_.appendChild(instance.element_)
         } else {
-          parentElement.element_.insertBefore(instance.element_, nextSibling)
+          parentElement.element_.insertBefore(
+            instance.element_,
+            nextSibling.element_
+          )
         }
 
         break
@@ -1280,15 +1297,24 @@
 
   const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     switch (instance.tag_) {
-      case FunctionComponentTag:
+      case FunctionComponentTag: {
+        destroyHooks(instance.id)
+        // NOTE: Intentional case fallthrough
+      }
       case ClassComponentTag: {
+        instance.context_.state_[REMOVE_DEPENDENCIES](instance)
         if (instance.child) {
           unmountNodeInstance(instance.child)
         }
         break
       }
-      case TextNodeTag:
       case HtmlElementTag: {
+        for (const lazyUpdate of instance.lazyUpdates) {
+          lazyUpdate.state_[REMOVE_DEPENDENCIES](lazyUpdate)
+        }
+        // NOTE: Intentional case fallthrough
+      }
+      case TextNodeTag: {
         assert(instance.parentElement_)
         instance.parentElement_.element_.removeChild(instance.element_)
         break
@@ -1372,16 +1398,11 @@
       lazyUpdates: [],
     }
 
-    const rootComponentInstance = 
-    createNodeInstance(descriptor, {
+    const rootComponentInstance = createNodeInstance(descriptor, {
       state_,
     })
 
-    mountNodeInstance(
-      rootComponentInstance,
-      rootElementInstance,
-      null
-    )
+    mountNodeInstance(rootComponentInstance, rootElementInstance, null)
   }
 
   const kaiku = {
