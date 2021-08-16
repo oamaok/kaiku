@@ -20,8 +20,16 @@ const getStack = () => {
   }
 }
 
-const { h, render, createState, useEffect, useState, useRef, Component } =
-  getKaiku()
+const {
+  h,
+  Fragment,
+  render,
+  createState,
+  useEffect,
+  useState,
+  useRef,
+  Component,
+} = getKaiku()
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -730,7 +738,7 @@ describe('kaiku', () => {
     expect(thirdEffectCall).toHaveBeenCalledTimes(2)
   })
 
-  it.skip('should handle class components', async () => {
+  it('should handle class components', async () => {
     class App extends Component {
       state = { counter: 0 }
 
@@ -755,7 +763,7 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it.skip('should handle componentDidMount', async () => {
+  it('should handle componentDidMount', async () => {
     const componentDidMountCall = jest.fn()
 
     class App extends Component {
@@ -773,5 +781,18 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     expect(componentDidMountCall).toHaveBeenCalledWith('Hello world!')
+  })
+
+  it('should render fragments perfectly', async () => {
+    const App = () => (
+      <>
+        <span>Hello</span>
+        <span>world!</span>
+      </>
+    )
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
   })
 })

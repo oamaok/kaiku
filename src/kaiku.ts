@@ -142,8 +142,13 @@
     | HtmlElementInstance
     | TextInstance
 
-  class Component<PropertiesT extends DefaultProps> {
-    static [CLASS_COMPONENT_FLAG]: true
+  abstract class Component<PropertiesT extends DefaultProps> {
+    static [CLASS_COMPONENT_FLAG] = true
+    state: object = {}
+    constructor() {}
+    componentDidMount() {}
+    componentWillUnmount() {}
+    abstract render(props: PropertiesT): NodeDescriptor<any>
   }
 
   type FunctionComponent<PropertiesT extends DefaultProps> = (
@@ -200,7 +205,11 @@
     current?: T
   }
 
-  type Dependee = ClassComponentInstance<any> | FunctionComponentInstance<any> | Effect | LazyUpdate<any>
+  type Dependee =
+    | ClassComponentInstance<any>
+    | FunctionComponentInstance<any>
+    | Effect
+    | LazyUpdate<any>
 
   type Render = <PropertiesT extends DefaultProps, StateT extends {}>(
     rootDescriptor: NodeDescriptor<PropertiesT>,
@@ -286,8 +295,6 @@
     // so mark it as queued. This will be reset once initialization is done.
     let deferredUpdateQueued = true
 
-
-
     const deferredUpdate = () => {
       deferredUpdateQueued = false
       const updatedDependees = new Set()
@@ -313,7 +320,6 @@
       fn: F,
       ...args: Parameters<F>
     ): ReturnType<F> => {
-
       const previousDependencies = dependeeToKeys.get(dependee)
       if (previousDependencies) {
         for (const key of previousDependencies) {
@@ -652,7 +658,6 @@
     ) {
       if (instance.tagName_ !== descriptor.tagName_) {
         // TODO: Replace tags in-place
-        
         return false
       }
 
@@ -699,17 +704,91 @@
   ///////////////
 
   const createClassComponentDescriptor = <PropertiesT extends {}>(
-    class_: Component<PropertiesT>,
-    props: PropertiesT | null,
+    class_: ClassComponent<PropertiesT>,
+    props: PropertiesT,
     children: Child[]
-  ): ClassComponentDescriptor<PropertiesT> => {}
+  ): ClassComponentDescriptor<PropertiesT> => ({
+    tag_: ClassComponentTag,
+    class_,
+    props,
+  })
 
-  const createClassComponentInstance = <PropertiesT extends {}>() => {}
+  const createClassComponentInstance = <PropertiesT extends {}>(
+    descriptor: ClassComponentDescriptor<PropertiesT>,
+    context: Context<any>
+  ): ClassComponentInstance<PropertiesT> => {
+    const classInstance = new descriptor.class_(descriptor.props)
+    classInstance.render = classInstance.render.bind(classInstance)
+    classInstance.state = context.state_[CREATE_LOCAL_STATE](
+      classInstance.state
+    )
+    classInstance.componentDidMount =
+      classInstance.componentDidMount.bind(classInstance)
+
+    const instance: ClassComponentInstance<PropertiesT> = {
+      tag_: ClassComponentTag,
+      context_: context,
+      instance: classInstance,
+      props: EMPTY_OBJECT as PropertiesT,
+      parentElement_: null,
+      nextSibling_: null,
+      child: null,
+    }
+
+    updateClassComponentInstance(instance, descriptor.props)
+
+    return instance
+  }
 
   const updateClassComponentInstance = <PropertiesT extends {}>(
     instance: ClassComponentInstance<PropertiesT>,
-    props: PropertiesT | null
-  ) => {}
+    props: PropertiesT = instance.props
+  ) => {
+    if (props !== instance.props) {
+      const keys = unionOfKeys(props, instance.props)
+      let equalProps = true
+
+      for (const key of keys) {
+        if (props[key] !== instance.props[key]) {
+          equalProps = false
+          break
+        }
+      }
+
+      if (equalProps) {
+        return
+      }
+    }
+
+    instance.props = props
+
+    const childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
+      instance,
+      instance.instance.render,
+      props
+    )
+
+    if (!instance.child) {
+      instance.child = createNodeInstance(childDescriptor, instance.context_)
+      return
+    }
+
+    const wasReused = reuseNodeInstance(instance.child, childDescriptor)
+
+    if (!wasReused) {
+      const newChild = createNodeInstance(childDescriptor, instance.context_)
+      unmountNodeInstance(instance.child)
+      instance.child = newChild
+    }
+
+    if (instance.parentElement_) {
+      mountNodeInstance(
+        instance,
+        instance.parentElement_,
+        instance.nextSibling_
+      )
+    }
+  }
 
   //
   //  Function components
@@ -767,7 +846,6 @@
         return
       }
     }
-
 
     instance.props = props
 
@@ -847,17 +925,15 @@
     // NOTE: The fragment children are stored in reverse order to make
     // DOM operations on them easier.
 
-    // TODO: Handle deletions
     instance.children_ = []
-
-    const keys = new Set()
+    const nextkeys = new Set()
 
     for (let i = childDescriptors.length - 1; i >= 0; i--) {
       const descriptor = childDescriptors[i]
       const descriptorKey = getKeyOfNodeDescriptor(descriptor)
       const key = descriptorKey === null ? i : descriptorKey
 
-      keys.add(key)
+      nextkeys.add(key)
 
       const existingChild = instance.childMap.get(key)
       const wasReused =
@@ -880,7 +956,7 @@
     }
 
     for (const [key, child] of instance.childMap) {
-      if (!keys.has(key)) {
+      if (!nextkeys.has(key)) {
         // TODO: Destroy, unmount
         unmountNodeInstance(child)
         instance.childMap.delete(key)
@@ -1007,7 +1083,7 @@
       nextSibling_: null,
       props: EMPTY_OBJECT,
       children_: null,
-      lazyUpdates: []
+      lazyUpdates: [],
     }
 
     updateHtmlElementInstance(instance, descriptor.props, descriptor.children_)
@@ -1020,7 +1096,6 @@
     nextProps: HtmlElementProperties,
     children: Child[]
   ) => {
-    
     const keys = unionOfKeys(nextProps, instance.props)
 
     for (const key of keys) {
@@ -1047,7 +1122,10 @@
         }
 
         if (key in nextProps) {
-          instance.element_.addEventListener(eventName as any, nextProps[key] as any)
+          instance.element_.addEventListener(
+            eventName as any,
+            nextProps[key] as any
+          )
         }
       } else {
         switch (key) {
@@ -1070,7 +1148,8 @@
           }
           case 'checked': {
             lazy(instance, nextProps.checked, (value) => {
-              ;(instance.element_ as HTMLInputElement).checked = value as boolean
+              ;(instance.element_ as HTMLInputElement).checked =
+                value as boolean
             })
             continue
           }
@@ -1157,6 +1236,11 @@
         }
         instance.parentElement_ = parentElement
         instance.nextSibling_ = nextSibling
+
+        // TODO: This gets called multiple times. It shouldn't.
+        if (instance.tag_ === ClassComponentTag) {
+          instance.instance.componentDidMount()
+        }
         break
       }
 
@@ -1251,25 +1335,33 @@
     }
 
     if (type[CLASS_COMPONENT_FLAG]) {
-      return createClassComponentDescriptor(type, props || EMPTY_OBJECT, children)
+      return createClassComponentDescriptor(
+        type,
+        props || EMPTY_OBJECT,
+        children
+      )
     }
 
     if (type === Fragment) {
       return createFragmentDescriptor(props || EMPTY_OBJECT, children)
     }
 
-    return createFunctionComponentDescriptor(type, props || EMPTY_OBJECT, children)
+    return createFunctionComponentDescriptor(
+      type,
+      props || EMPTY_OBJECT,
+      children
+    )
   }
 
   const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
-    rootDescriptor: NodeDescriptor<PropertiesT>,
-    rootElement: HTMLElement,
+    descriptor: NodeDescriptor<PropertiesT>,
+    element: HTMLElement,
     state_: State<StateT> = createState({}) as State<StateT>
   ) => {
-    const rootInstance: HtmlElementInstance = {
+    const rootElementInstance: HtmlElementInstance = {
       tag_: HtmlElementTag,
-      tagName_: rootElement.tagName as HtmlElementTagName,
-      element_: rootElement,
+      tagName_: element.tagName as HtmlElementTagName,
+      element_: element,
       children_: null,
       context_: {
         state_,
@@ -1277,26 +1369,31 @@
       parentElement_: null,
       nextSibling_: null,
       props: EMPTY_OBJECT,
-      lazyUpdates: []
+      lazyUpdates: [],
     }
 
+    const rootComponentInstance = 
+    createNodeInstance(descriptor, {
+      state_,
+    })
+
     mountNodeInstance(
-      createNodeInstance(rootDescriptor, {
-        state_,
-      }),
-      rootInstance,
+      rootComponentInstance,
+      rootElementInstance,
       null
     )
   }
 
   const kaiku = {
     Component,
+    Fragment,
     h,
     render,
     useState,
     useRef,
     useEffect,
     createState,
+    immutable,
   }
 
   if (typeof module !== 'undefined') {

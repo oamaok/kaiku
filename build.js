@@ -52,6 +52,7 @@ terser
           'Component',
           'componentDidMount',
           'componentWillUnmount',
+          'Fragment',
           'state',
         ],
       },
