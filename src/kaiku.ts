@@ -48,8 +48,6 @@
     className?: ClassNames
   }
 
-  type NextSibling = HtmlElementInstance | TextInstance
-
   type DefaultProps = Record<string, any>
   type LazyProperty<T> = T | (() => T)
 
@@ -99,7 +97,7 @@
     props: PropertiesT
     child: NodeInstance<any> | null
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling | null
+    nextSibling_: NodeInstance<any> | null
   }
 
   type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
@@ -109,7 +107,7 @@
     context_: Context<{}>
     props: PropertiesT
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling | null
+    nextSibling_: NodeInstance<any> | null
     child: NodeInstance<any> | null
   }
 
@@ -120,7 +118,7 @@
     children_: NodeInstance<DefaultProps>[]
     childMap: Map<string | number, NodeInstance<DefaultProps>>
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling | null
+    nextSibling_: NodeInstance<any> | null
   }
 
   type HtmlElementInstance = {
@@ -130,7 +128,7 @@
     props: HtmlElementProperties
     context_: Context<{}>
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling | null
+    nextSibling_: NodeInstance<any> | null
     children_: FragmentInstance | null
     lazyUpdates: LazyUpdate<any>[]
   }
@@ -139,7 +137,7 @@
     tag_: typeof TextNodeTag
     element_: Text
     parentElement_: HtmlElementInstance | null
-    nextSibling_: NextSibling | null
+    nextSibling_: NodeInstance<any> | null
   }
 
   type NodeInstance<PropertiesT extends DefaultProps> =
@@ -296,18 +294,16 @@
     const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
     const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
 
-    let updatedDependencies: StateKey[] = []
+    const updatedDependencies: StateKey[] = []
     const keyToId: Record<any, number> = {}
 
-    // We don't want to run `deferredUpdate` on initialization,
-    // so mark it as queued. This will be reset once initialization is done.
-    let deferredUpdateQueued = true
+    let deferredUpdateQueued = false
 
     const deferredUpdate = () => {
       deferredUpdateQueued = false
       const updatedDependees = new Set<DependeeId>()
 
-      for (const key of updatedDependencies) {
+      for (let key; (key = updatedDependencies.pop()); ) {
         const dependees = keyToDependees.get(key)
         if (!dependees) continue
         for (const dependeeId of dependees) {
@@ -319,8 +315,6 @@
           updateDependee(currentDependees.get(dependeeId)!)
         }
       }
-
-      updatedDependencies = []
     }
 
     const trackedExectute = <F extends (...args: any[]) => any>(
@@ -377,6 +371,7 @@
       const id = ++nextObjectId
 
       const isArray = Array.isArray(obj)
+      let initializing = true
 
       const proxy = new Proxy(obj, {
         get(target, key) {
@@ -388,8 +383,8 @@
 
           if (trackedDependencyStack.length) {
             const dependencyKey = (id |
-              ((keyToId[key] || (keyToId[key] = ++nextKeyId)) <<
-                26)) as StateKey
+              ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
+                0x4000000)) as StateKey
             trackedDependencyStack[trackedDependencyStack.length - 1].add(
               dependencyKey
             )
@@ -409,7 +404,9 @@
 
           if (
             !(isArray && key === 'length') &&
-            typeof value !== 'object' &&
+            (value === null ||
+              typeof value !== 'object' ||
+              (value[STATE_FLAG] as boolean)) &&
             target[key] === value
           ) {
             return true
@@ -431,8 +428,13 @@
             target[key] = value
           }
 
+          if (initializing) {
+            return true
+          }
+
           const dependencyKey = (id |
-            ((keyToId[key] || (keyToId[key] = ++nextKeyId)) << 26)) as StateKey
+            ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
+              0x4000000)) as StateKey
           updatedDependencies.push(dependencyKey)
           if (!deferredUpdateQueued) {
             deferredUpdateQueued = true
@@ -450,14 +452,11 @@
           proxy[key] = proxy[key]
         }
       }
-
+      initializing = false
       return proxy as State<T>
     }
 
     const state = wrap(initialState)
-    deferredUpdateQueued = false
-    // Clear keys, since everything was touched at init
-    updatedDependencies = []
 
     return state
   }
@@ -582,34 +581,6 @@
   //
   ///////////////
 
-  const getFirstChildOfNodeInstance = (
-    instance: NodeInstance<DefaultProps>
-  ): NextSibling | null => {
-    switch (instance.tag_) {
-      case ClassComponentTag:
-      case FunctionComponentTag: {
-        if (!instance.child) {
-          return null
-        }
-        return getFirstChildOfNodeInstance(instance.child)
-      }
-
-      case FragmentTag: {
-        if (instance.children_.length !== 0) {
-          return getFirstChildOfNodeInstance(
-            instance.children_[instance.children_.length - 1]
-          )
-        }
-
-        return null
-      }
-
-      case TextNodeTag:
-      case HtmlElementTag:
-        return instance
-    }
-  }
-
   const childrenToDescriptors = (children: Child[]): NodeDescriptor<any>[] => {
     const result: NodeDescriptor<any>[] = []
 
@@ -725,7 +696,7 @@
 
   const createClassComponentInstance = <PropertiesT extends {}>(
     descriptor: ClassComponentDescriptor<PropertiesT>,
-    context: Context<any>
+    context: Context<{}>
   ): ClassComponentInstance<PropertiesT> => {
     const classInstance = new descriptor.class_(descriptor.props)
     classInstance.render = classInstance.render.bind(classInstance)
@@ -738,13 +709,13 @@
       tag_: ClassComponentTag,
       context_: context,
       instance: classInstance,
-      props: EMPTY_OBJECT as PropertiesT,
+      props: descriptor.props,
       parentElement_: null,
       nextSibling_: null,
       child: null,
     }
 
-    updateClassComponentInstance(instance, descriptor.props)
+    updateClassComponentInstance(instance)
 
     return instance
   }
@@ -824,20 +795,20 @@
 
   const createFunctionComponentInstance = <PropertiesT extends {}>(
     descriptor: FunctionComponentDescriptor<PropertiesT>,
-    context: Context<any>
+    context: Context<{}>
   ): FunctionComponentInstance<PropertiesT> => {
     const instance: FunctionComponentInstance<PropertiesT> = {
       id_: ++nextDependeeId as DependeeId,
       tag_: FunctionComponentTag,
       context_: context,
       func: descriptor.func,
-      props: EMPTY_OBJECT as PropertiesT,
+      props: descriptor.props,
       parentElement_: null,
       nextSibling_: null,
       child: null,
     }
 
-    updateFunctionComponentInstance(instance, descriptor.props)
+    updateFunctionComponentInstance(instance)
 
     return instance
   }
@@ -868,7 +839,7 @@
     const childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
       instance,
       instance.func,
-      props
+      instance.props
     )
     stopHookTracking()
 
@@ -922,7 +893,7 @@
 
   const createFragmentInstance = (
     descriptor: FragmentDescriptor,
-    context_: Context<any>
+    context_: Context<{}>
   ): FragmentInstance => {
     const instance: FragmentInstance = {
       tag_: FragmentTag,
@@ -1090,7 +1061,7 @@
 
   const createHtmlElementInstance = (
     descriptor: HtmlElementDescriptor,
-    context_: Context<any>
+    context_: Context<{}>
   ): HtmlElementInstance => {
     const element_ =
       descriptor.existingElement || document.createElement(descriptor.tagName_)
@@ -1246,7 +1217,7 @@
 
   const createNodeInstance = <PropertiesT extends DefaultProps>(
     descriptor: NodeDescriptor<PropertiesT>,
-    context: Context<any>
+    context: Context<{}>
   ): NodeInstance<PropertiesT> => {
     switch (descriptor.tag_) {
       case ClassComponentTag:
@@ -1262,23 +1233,48 @@
     }
   }
 
+  const getNextSiblingElement = (
+    instance: NodeInstance<any>
+  ): HTMLElement | Text | null => {
+    switch (instance.tag_) {
+      case ClassComponentTag:
+      case FunctionComponentTag: {
+        if (instance.child) {
+          return getNextSiblingElement(instance.child)
+        }
+
+        if (instance.nextSibling_) {
+          return getNextSiblingElement(instance.nextSibling_)
+        }
+
+        return null
+      }
+
+      case FragmentTag: {
+        if (instance.children_.length !== 0) {
+          return getNextSiblingElement(
+            instance.children_[instance.children_.length - 1]
+          )
+        }
+
+        if (instance.nextSibling_) {
+          return getNextSiblingElement(instance.nextSibling_)
+        }
+
+        return null
+      }
+
+      case TextNodeTag:
+      case HtmlElementTag:
+        return instance.element_
+    }
+  }
+
   const mountNodeInstance = <PropertiesT extends DefaultProps>(
     instance: NodeInstance<PropertiesT>,
     parentElement: HtmlElementInstance,
-    nextSibling: NextSibling | null
+    nextSibling: NodeInstance<any> | null
   ) => {
-    // TODO: Can we reuse higher level nextSibling to skip remounts completely?
-    // As in the following example, where you would reuse the `FunctionComponentInstance`:
-    // ```
-    //    <Fragment>
-    //      <div />
-    //      {condition ? <Foo /> : <Bar />}
-    //      <div />
-    //    </Fragment />
-    // ```
-    // Re-use should be possible here. You can just call `getFirstChildOfNodeInstance`
-    // when actually mounting.
-
     switch (instance.tag_) {
       case ClassComponentTag:
       case FunctionComponentTag: {
@@ -1312,22 +1308,15 @@
         instance.nextSibling_ = nextSibling
         instance.parentElement_ = parentElement
 
-        if (!nextSibling) {
-          parentElement.element_.appendChild(instance.element_)
-        } else {
-          parentElement.element_.insertBefore(
-            instance.element_,
-            nextSibling.element_
-          )
-        }
-
+        const refElement = nextSibling && getNextSiblingElement(nextSibling)
+        parentElement.element_.insertBefore(instance.element_, refElement)
         break
       }
 
       case FragmentTag: {
         for (const child of instance.children_) {
           mountNodeInstance(child, parentElement, nextSibling)
-          nextSibling = getFirstChildOfNodeInstance(child)
+          nextSibling = child
         }
       }
     }
