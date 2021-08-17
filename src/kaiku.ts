@@ -40,7 +40,10 @@
   type FragmentProperties = { key?: string | number }
 
   type HtmlElementTagName = keyof HTMLElementTagNameMap
-  type HtmlElementProperties = Record<string, any>
+  type HtmlElementProperties = Record<string, any> & {
+    style?: Record<string, string>
+    className?: ClassNames
+  }
 
   type NextSibling = HtmlElementInstance | TextInstance
 
@@ -148,12 +151,12 @@
     constructor() {}
     componentDidMount() {}
     componentWillUnmount() {}
-    abstract render(props: PropertiesT): NodeDescriptor<any>
+    abstract render(props: PropertiesT): NodeDescriptor<any> | null
   }
 
   type FunctionComponent<PropertiesT extends DefaultProps> = (
-    props: PropertiesT | null
-  ) => NodeDescriptor<any>
+    props: PropertiesT
+  ) => NodeDescriptor<any> | null
 
   type ClassComponent<PropertiesT extends {}> = {
     new (props: PropertiesT): Component<PropertiesT>
@@ -567,7 +570,7 @@
     useState({ current: initialValue })
 
   //
-  //  Child utilities
+  //  Node utilities
   //
   ///////////////
 
@@ -705,7 +708,7 @@
   const createClassComponentDescriptor = <PropertiesT extends {}>(
     class_: ClassComponent<PropertiesT>,
     props: PropertiesT,
-    children: Child[]
+    _children: Child[]
   ): ClassComponentDescriptor<PropertiesT> => ({
     tag_: ClassComponentTag,
     class_,
@@ -721,8 +724,6 @@
     classInstance.state = context.state_[CREATE_LOCAL_STATE](
       classInstance.state
     )
-    classInstance.componentDidMount =
-      classInstance.componentDidMount.bind(classInstance)
 
     const instance: ClassComponentInstance<PropertiesT> = {
       tag_: ClassComponentTag,
@@ -767,6 +768,14 @@
       props
     )
 
+    if (!childDescriptor) {
+      if (instance.child) {
+        unmountNodeInstance(instance.child)
+      }
+
+      return
+    }
+
     if (!instance.child) {
       instance.child = createNodeInstance(childDescriptor, instance.context_)
       return
@@ -799,7 +808,7 @@
   const createFunctionComponentDescriptor = <PropertiesT extends {}>(
     func: FunctionComponent<PropertiesT>,
     props: PropertiesT,
-    children: Child[]
+    _children: Child[]
   ): FunctionComponentDescriptor<PropertiesT> => ({
     tag_: FunctionComponentTag,
     func,
@@ -855,6 +864,14 @@
       props
     )
     stopHookTracking()
+
+    if (!childDescriptor) {
+      if (instance.child) {
+        unmountNodeInstance(instance.child)
+      }
+      instance.child = null
+      return
+    }
 
     if (!instance.child) {
       instance.child = createNodeInstance(childDescriptor, instance.context_)
@@ -1242,19 +1259,32 @@
     parentElement: HtmlElementInstance,
     nextSibling: NextSibling | null
   ) => {
+    // TODO: Can we reuse higher level nextSibling to skip remounts completely?
+    // As in the following example, where you would reuse the `FunctionComponentInstance`:
+    // ```
+    //    <Fragment>
+    //      <div />
+    //      {condition ? <Foo /> : <Bar />}
+    //      <div />
+    //    </Fragment />
+    // ```
+    // Re-use should be possible here. You can just call `getFirstChildOfNodeInstance`
+    // when actually mounting.
+
     switch (instance.tag_) {
       case ClassComponentTag:
       case FunctionComponentTag: {
         if (instance.child) {
           mountNodeInstance(instance.child, parentElement, nextSibling)
         }
+
+        if (instance.tag_ === ClassComponentTag && !instance.parentElement_) {
+          instance.instance.componentDidMount()
+        }
+
         instance.parentElement_ = parentElement
         instance.nextSibling_ = nextSibling
 
-        // TODO: This gets called multiple times. It shouldn't.
-        if (instance.tag_ === ClassComponentTag) {
-          instance.instance.componentDidMount()
-        }
         break
       }
 
@@ -1299,26 +1329,35 @@
     switch (instance.tag_) {
       case FunctionComponentTag: {
         destroyHooks(instance.id)
-        // NOTE: Intentional case fallthrough
-      }
-      case ClassComponentTag: {
         instance.context_.state_[REMOVE_DEPENDENCIES](instance)
         if (instance.child) {
           unmountNodeInstance(instance.child)
         }
         break
       }
-      case HtmlElementTag: {
-        for (const lazyUpdate of instance.lazyUpdates) {
-          lazyUpdate.state_[REMOVE_DEPENDENCIES](lazyUpdate)
+
+      case ClassComponentTag: {
+        instance.instance.componentWillUnmount()
+        instance.context_.state_[REMOVE_DEPENDENCIES](instance)
+        if (instance.child) {
+          unmountNodeInstance(instance.child)
         }
-        // NOTE: Intentional case fallthrough
+        break
       }
+
+      case HtmlElementTag: {
+        destroyLazyUpdates(instance)
+        assert(instance.parentElement_)
+        instance.parentElement_.element_.removeChild(instance.element_)
+        break
+      }
+
       case TextNodeTag: {
         assert(instance.parentElement_)
         instance.parentElement_.element_.removeChild(instance.element_)
         break
       }
+
       case FragmentTag: {
         instance.children_.forEach(unmountNodeInstance)
         break
@@ -1336,12 +1375,12 @@
     props: HtmlElementProperties,
     ...children: Child[]
   ): HtmlElementDescriptor
-  function h<PropertiesT extends {}>(
+  function h<PropertiesT extends DefaultProps>(
     type: FunctionComponent<PropertiesT>,
     props: PropertiesT | null,
     ...children: Child[]
   ): FunctionComponentDescriptor<PropertiesT>
-  function h<PropertiesT>(
+  function h<PropertiesT extends DefaultProps>(
     type: ClassComponent<PropertiesT>,
     props: PropertiesT | null,
     ...children: Child[]
@@ -1351,7 +1390,11 @@
     props: null | { key?: string | number },
     ...children: Child[]
   ): FragmentDescriptor
-  function h(type: any, props: any, ...children: any): NodeDescriptor<any> {
+  function h(
+    type: any,
+    props: DefaultProps | HtmlElementProperties | null,
+    ...children: any
+  ): NodeDescriptor<any> {
     if (typeof type === 'string') {
       return createHtmlElementDescriptor(
         type as HtmlElementTagName,
@@ -1360,7 +1403,7 @@
       )
     }
 
-    if (type[CLASS_COMPONENT_FLAG]) {
+    if (type[CLASS_COMPONENT_FLAG] as boolean) {
       return createClassComponentDescriptor(
         type,
         props || EMPTY_OBJECT,

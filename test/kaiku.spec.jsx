@@ -763,7 +763,8 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
-  it('should handle componentDidMount', async () => {
+  it('should call componentDidMount only once', async () => {
+    const state = createState({ ticker: 0 })
     const componentDidMountCall = jest.fn()
 
     class App extends Component {
@@ -774,13 +775,54 @@ describe('kaiku', () => {
       }
 
       render() {
-        return <div ref={this.ref}>Hello world!</div>
+        return <div ref={this.ref}>{state.ticker}</div>
       }
     }
 
-    render(<App />, rootNode)
+    render(<App />, rootNode, state)
 
-    expect(componentDidMountCall).toHaveBeenCalledWith('Hello world!')
+    expect(componentDidMountCall).toHaveBeenCalledWith('0')
+
+    state.ticker++
+    await nextTick()
+
+    expect(componentDidMountCall).toHaveBeenCalledTimes(1)
+  })
+
+  it('should call componentWillUnmount', async () => {
+    const state = createState({ ticker: 0 })
+
+    const componentDidMountCall = jest.fn()
+    const componentWillUnmountCall = jest.fn()
+
+    class ClassComponent extends Component {
+      componentDidMount() {
+        componentDidMountCall()
+      }
+
+      componentWillUnmount() {
+        componentWillUnmountCall()
+      }
+
+      render() {
+        return null
+      }
+    }
+
+    const App = () => {
+      return state.ticker === 0 ? <ClassComponent /> : null
+    }
+
+    render(<App />, rootNode, state)
+
+    expect(componentDidMountCall).toHaveBeenCalledTimes(1)
+    expect(componentWillUnmountCall).toHaveBeenCalledTimes(0)
+
+    state.ticker++
+    await nextTick()
+
+    expect(componentDidMountCall).toHaveBeenCalledTimes(1)
+    expect(componentWillUnmountCall).toHaveBeenCalledTimes(1)
   })
 
   it('should render fragments perfectly', async () => {
