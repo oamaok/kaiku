@@ -33,6 +33,9 @@
   const EffectTag = 5
   const LazyUpdateTag = 6
 
+  type StateKey = number & { __: 'StateKey' }
+  type DependeeId = number & { __: 'DependeeId' }
+
   type Context<StateT extends {}> = {
     state_: State<StateT>
   }
@@ -89,6 +92,7 @@
     | TextDescriptor
 
   type ClassComponentInstance<PropertiesT extends DefaultProps> = {
+    id_: DependeeId
     tag_: typeof ClassComponentTag
     context_: Context<{}>
     instance: Component<PropertiesT>
@@ -99,7 +103,7 @@
   }
 
   type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
-    id: FunctionComponentId
+    id_: DependeeId
     tag_: typeof FunctionComponentTag
     func: FunctionComponent<PropertiesT>
     context_: Context<{}>
@@ -172,9 +176,6 @@
     | FunctionComponent<any>
     | Child[]
 
-  type StateKey = number & { __: 'StateKey' }
-  type FunctionComponentId = number & { __: 'FunctionComponentId' }
-
   type StateInternals = {
     [STATE_FLAG]: true
     [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
@@ -191,12 +192,14 @@
   type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
 
   type Effect = {
+    id_: DependeeId
     tag_: typeof EffectTag
     state_: State<object>
     fn: () => void
   }
 
   type LazyUpdate<T> = {
+    id_: DependeeId
     tag_: typeof LazyUpdateTag
     state_: State<object>
     prop: () => T
@@ -259,6 +262,8 @@
   //
   ///////////////
 
+  let nextDependeeId = 0
+
   const updateDependee = (dependee: Dependee) => {
     switch (dependee.tag_) {
       case FunctionComponentTag: {
@@ -287,8 +292,9 @@
     let nextKeyId = 0
 
     const trackedDependencyStack: Set<StateKey>[] = []
-    const dependeeToKeys: Map<Dependee, Set<StateKey>> = new Map()
-    const keyToDependees: Map<StateKey, Set<Dependee>> = new Map()
+    const currentDependees: Map<DependeeId, Dependee> = new Map()
+    const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
+    const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
 
     let updatedDependencies: StateKey[] = []
     const keyToId: Record<any, number> = {}
@@ -299,18 +305,18 @@
 
     const deferredUpdate = () => {
       deferredUpdateQueued = false
-      const updatedDependees = new Set()
+      const updatedDependees = new Set<DependeeId>()
 
       for (const key of updatedDependencies) {
         const dependees = keyToDependees.get(key)
         if (!dependees) continue
-        for (const dependee of dependees) {
-          if (updatedDependees.has(dependee)) {
+        for (const dependeeId of dependees) {
+          if (updatedDependees.has(dependeeId)) {
             continue
           }
 
-          updatedDependees.add(dependee)
-          updateDependee(dependee)
+          updatedDependees.add(dependeeId)
+          updateDependee(currentDependees.get(dependeeId)!)
         }
       }
 
@@ -322,12 +328,13 @@
       fn: F,
       ...args: Parameters<F>
     ): ReturnType<F> => {
-      const previousDependencies = dependeeToKeys.get(dependee)
+      currentDependees.set(dependee.id_, dependee)
+      const previousDependencies = dependeeToKeys.get(dependee.id_)
       if (previousDependencies) {
         for (const key of previousDependencies) {
           const dependees = keyToDependees.get(key)
           assert(dependees)
-          dependees.delete(dependee)
+          dependees.delete(dependee.id_)
         }
       }
 
@@ -336,7 +343,7 @@
       const dependencies = trackedDependencyStack.pop()
 
       assert(dependencies)
-      dependeeToKeys.set(dependee, dependencies)
+      dependeeToKeys.set(dependee.id_, dependencies)
 
       for (const key of dependencies) {
         let dependencies = keyToDependees.get(key)
@@ -344,14 +351,15 @@
           dependencies = new Set()
           keyToDependees.set(key, dependencies)
         }
-        dependencies.add(dependee)
+        dependencies.add(dependee.id_)
       }
 
       return result
     }
 
     const removeDependencies = (dependee: Dependee) => {
-      dependeeToKeys.delete(dependee)
+      currentDependees.delete(dependee.id_)
+      dependeeToKeys.delete(dependee.id_)
     }
 
     const createLocalState = <T extends object>(initialState: T): State<T> => {
@@ -438,7 +446,9 @@
       // Recursively wrap all fields of the object by invoking the `set()` function
       const keys = Object.keys(obj) as (keyof T)[]
       for (const key of keys) {
-        proxy[key] = proxy[key]
+        if (typeof proxy[key] === 'object') {
+          proxy[key] = proxy[key]
+        }
       }
 
       return proxy as State<T>
@@ -471,18 +481,15 @@
   //
   ///////////////
 
-  const effects = new Map<FunctionComponentId, Effect[]>()
-  const componentStates = new Map<FunctionComponentId, State<any>[]>()
+  const effects = new Map<DependeeId, Effect[]>()
+  const componentStates = new Map<DependeeId, State<any>[]>()
   const componentStateIndexStack: number[] = []
 
-  const componentIdStack: FunctionComponentId[] = []
+  const componentIdStack: DependeeId[] = []
   const stateStack: State<object>[] = []
-  const componentsThatHaveUpdatedAtLeastOnce = new Set<FunctionComponentId>()
+  const componentsThatHaveUpdatedAtLeastOnce = new Set<DependeeId>()
 
-  const startHookTracking = (
-    componentId: FunctionComponentId,
-    state: State<any>
-  ) => {
+  const startHookTracking = (componentId: DependeeId, state: State<any>) => {
     stateStack.push(state)
     componentIdStack.push(componentId)
     componentStateIndexStack.push(0)
@@ -500,7 +507,7 @@
     componentsThatHaveUpdatedAtLeastOnce.add(componentId)
   }
 
-  const destroyHooks = (componentId: FunctionComponentId) => {
+  const destroyHooks = (componentId: DependeeId) => {
     componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
     componentStates.delete(componentId)
     effects.delete(componentId)
@@ -522,6 +529,7 @@
     assert(state)
 
     const effect: Effect = {
+      id_: ++nextDependeeId as DependeeId,
       tag_: EffectTag,
       state_: state,
       fn,
@@ -726,6 +734,7 @@
     )
 
     const instance: ClassComponentInstance<PropertiesT> = {
+      id_: ++nextDependeeId as DependeeId,
       tag_: ClassComponentTag,
       context_: context,
       instance: classInstance,
@@ -803,8 +812,6 @@
   //
   ///////////////
 
-  let nextFunctionComponentId = 0
-
   const createFunctionComponentDescriptor = <PropertiesT extends {}>(
     func: FunctionComponent<PropertiesT>,
     props: PropertiesT,
@@ -820,7 +827,7 @@
     context: Context<any>
   ): FunctionComponentInstance<PropertiesT> => {
     const instance: FunctionComponentInstance<PropertiesT> = {
-      id: ++nextFunctionComponentId as FunctionComponentId,
+      id_: ++nextDependeeId as DependeeId,
       tag_: FunctionComponentTag,
       context_: context,
       func: descriptor.func,
@@ -857,7 +864,7 @@
 
     instance.props = props
 
-    startHookTracking(instance.id, instance.context_.state_)
+    startHookTracking(instance.id_, instance.context_.state_)
     const childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
       instance,
       instance.func,
@@ -1025,6 +1032,7 @@
     }
 
     const lazyUpdate: LazyUpdate<T> = {
+      id_: ++nextDependeeId as DependeeId,
       tag_: LazyUpdateTag,
       lastValue: undefined,
       prop: prop as () => T,
@@ -1328,7 +1336,7 @@
   const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     switch (instance.tag_) {
       case FunctionComponentTag: {
-        destroyHooks(instance.id)
+        destroyHooks(instance.id_)
         instance.context_.state_[REMOVE_DEPENDENCIES](instance)
         if (instance.child) {
           unmountNodeInstance(instance.child)
