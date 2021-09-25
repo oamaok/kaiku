@@ -252,8 +252,9 @@
     }
     return res as (keyof (A & B))[]
   }
-
-  const assert: typeof __assert = __DEBUG__ ? __assert : () => undefined
+  const assert: typeof __assert = __DEBUG__
+    ? __assert
+    : (undefined as unknown as typeof __assert)
 
   //
   //  State management
@@ -264,12 +265,9 @@
 
   const updateDependee = (dependee: Dependee) => {
     switch (dependee.tag_) {
-      case FunctionComponentTag: {
-        updateFunctionComponentInstance(dependee)
-        break
-      }
+      case FunctionComponentTag:
       case ClassComponentTag: {
-        updateClassComponentInstance(dependee)
+        updateComponentInstance(dependee)
         break
       }
       case EffectTag: {
@@ -327,7 +325,7 @@
       if (previousDependencies) {
         for (const key of previousDependencies) {
           const dependees = keyToDependees.get(key)
-          assert(dependees)
+          assert?.(dependees)
           dependees.delete(dependee.id_)
         }
       }
@@ -336,7 +334,7 @@
       const result = fn(...args)
       const dependencies = trackedDependencyStack.pop()
 
-      assert(dependencies)
+      assert?.(dependencies)
       dependeeToKeys.set(dependee.id_, dependencies)
 
       for (const key of dependencies) {
@@ -382,7 +380,7 @@
           }
 
           if (trackedDependencyStack.length) {
-            const dependencyKey = (id |
+            const dependencyKey = (id +
               ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
                 0x4000000)) as StateKey
             trackedDependencyStack[trackedDependencyStack.length - 1].add(
@@ -432,7 +430,7 @@
             return true
           }
 
-          const dependencyKey = (id |
+          const dependencyKey = (id +
             ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
               0x4000000)) as StateKey
           updatedDependencies.push(dependencyKey)
@@ -496,13 +494,13 @@
 
   const stopHookTracking = () => {
     const state = stateStack.pop()
-    assert(state)
+    assert?.(state)
 
     const refIndex = componentStateIndexStack.pop()
-    assert(typeof refIndex !== 'undefined')
+    assert?.(typeof refIndex !== 'undefined')
 
     const componentId = componentIdStack.pop()
-    assert(typeof componentId !== 'undefined')
+    assert?.(typeof componentId !== 'undefined')
     componentsThatHaveUpdatedAtLeastOnce.add(componentId)
   }
 
@@ -518,14 +516,14 @@
 
   const useEffect = (fn: () => void) => {
     const componentId = componentIdStack[componentIdStack.length - 1]
-    assert(typeof componentId !== 'undefined')
+    assert?.(typeof componentId !== 'undefined')
 
     if (componentsThatHaveUpdatedAtLeastOnce.has(componentId)) {
       return
     }
 
     const state = stateStack[stateStack.length - 1] as State<object> | undefined
-    assert(state)
+    assert?.(state)
 
     const effect: Effect = {
       id_: ++nextDependeeId as DependeeId,
@@ -541,7 +539,7 @@
       componentEffects = []
       effects.set(componentId, componentEffects)
     }
-    assert(componentEffects)
+    assert?.(componentEffects)
     componentEffects.push(effect)
   }
 
@@ -552,8 +550,8 @@
     ]++
     const state = stateStack[stateStack.length - 1] as State<object> | undefined
 
-    assert(state)
-    assert(typeof componentId !== 'undefined')
+    assert?.(state)
+    assert?.(typeof componentId !== 'undefined')
 
     let states = componentStates.get(componentId)
 
@@ -620,7 +618,7 @@
       descriptor.tag_ === ClassComponentTag &&
       instance.instance instanceof descriptor.class_
     ) {
-      updateClassComponentInstance(instance, descriptor.props)
+      updateComponentInstance(instance, descriptor.props)
       return true
     }
 
@@ -629,7 +627,7 @@
       descriptor.tag_ === FunctionComponentTag &&
       instance.func === descriptor.func
     ) {
-      updateFunctionComponentInstance(instance, descriptor.props)
+      updateComponentInstance(instance, descriptor.props)
       return true
     }
 
@@ -715,67 +713,9 @@
       child: null,
     }
 
-    updateClassComponentInstance(instance)
+    updateComponentInstance(instance)
 
     return instance
-  }
-
-  const updateClassComponentInstance = <PropertiesT extends {}>(
-    instance: ClassComponentInstance<PropertiesT>,
-    props: PropertiesT = instance.props
-  ) => {
-    if (props !== instance.props) {
-      const keys = unionOfKeys(props, instance.props)
-      let equalProps = true
-
-      for (const key of keys) {
-        if (props[key] !== instance.props[key]) {
-          equalProps = false
-          break
-        }
-      }
-
-      if (equalProps) {
-        return
-      }
-    }
-
-    instance.props = props
-
-    const childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
-      instance,
-      instance.instance.render,
-      props
-    )
-
-    if (!childDescriptor) {
-      if (instance.child) {
-        unmountNodeInstance(instance.child)
-      }
-
-      return
-    }
-
-    if (!instance.child) {
-      instance.child = createNodeInstance(childDescriptor, instance.context_)
-      return
-    }
-
-    const wasReused = reuseNodeInstance(instance.child, childDescriptor)
-
-    if (!wasReused) {
-      const newChild = createNodeInstance(childDescriptor, instance.context_)
-      unmountNodeInstance(instance.child)
-      instance.child = newChild
-    }
-
-    if (instance.parentElement_) {
-      mountNodeInstance(
-        instance,
-        instance.parentElement_,
-        instance.nextSibling_
-      )
-    }
   }
 
   //
@@ -808,13 +748,15 @@
       child: null,
     }
 
-    updateFunctionComponentInstance(instance)
+    updateComponentInstance(instance)
 
     return instance
   }
 
-  const updateFunctionComponentInstance = <PropertiesT extends {}>(
-    instance: FunctionComponentInstance<PropertiesT>,
+  const updateComponentInstance = <PropertiesT extends {}>(
+    instance:
+      | FunctionComponentInstance<PropertiesT>
+      | ClassComponentInstance<PropertiesT>,
     props: PropertiesT = instance.props
   ) => {
     if (props !== instance.props) {
@@ -835,13 +777,22 @@
 
     instance.props = props
 
-    startHookTracking(instance.id_, instance.context_.state_)
-    const childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
-      instance,
-      instance.func,
-      instance.props
-    )
-    stopHookTracking()
+    let childDescriptor
+    if (instance.tag_ === FunctionComponentTag) {
+      startHookTracking(instance.id_, instance.context_.state_)
+      childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
+        instance,
+        instance.func,
+        instance.props
+      )
+      stopHookTracking()
+    } else {
+      childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
+        instance,
+        instance.instance.render,
+        props
+      )
+    }
 
     if (!childDescriptor) {
       if (instance.child) {
@@ -934,7 +885,7 @@
         existingChild && reuseNodeInstance(existingChild, descriptor)
 
       if (wasReused) {
-        assert(existingChild)
+        assert?.(existingChild)
         instance.children_.push(existingChild)
       } else {
         if (existingChild) {
@@ -952,14 +903,6 @@
         unmountNodeInstance(child)
         instance.childMap.delete(key)
       }
-    }
-
-    if (instance.parentElement_) {
-      mountNodeInstance(
-        instance,
-        instance.parentElement_,
-        instance.nextSibling_
-      )
     }
   }
 
@@ -1344,13 +1287,13 @@
 
       case HtmlElementTag: {
         destroyLazyUpdates(instance)
-        assert(instance.parentElement_)
+        assert?.(instance.parentElement_)
         instance.parentElement_.element_.removeChild(instance.element_)
         break
       }
 
       case TextNodeTag: {
-        assert(instance.parentElement_)
+        assert?.(instance.parentElement_)
         instance.parentElement_.element_.removeChild(instance.element_)
         break
       }

@@ -12,17 +12,35 @@ esbuild.buildSync({
   outfile: 'dist/kaiku.dev.js',
   define: {
     __DEBUG__: true,
+
+    ClassComponentTag: '"ClassComponent"',
+    FunctionComponentTag: '"FunctionComponent"',
+    HtmlElementTag: '"HtmlElement"',
+    FragmentTag: '"Fragment"',
+    TextNodeTag: '"TextNode"',
+    EffectTag: '"EffectTag"',
+    LazyUpdateTag: '"LazyUpdateTag"',
   },
 })
 console.timeEnd(' - time')
 
 console.log('Build production version')
 console.time(' - time')
+
+let tagId = 0
 esbuild.buildSync({
   entryPoints: ['src/kaiku.ts'],
   outfile: 'dist/kaiku.js',
   define: {
     __DEBUG__: false,
+
+    ClassComponentTag: tagId++,
+    FunctionComponentTag: tagId++,
+    HtmlElementTag: tagId++,
+    FragmentTag: tagId++,
+    TextNodeTag: tagId++,
+    EffectTag: tagId++,
+    LazyUpdateTag: tagId++,
   },
 })
 console.timeEnd(' - time')
