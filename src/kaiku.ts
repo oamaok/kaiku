@@ -196,7 +196,8 @@
     id_: DependeeId
     tag_: typeof EffectTag
     state_: State<object>
-    fn: () => void
+    fn: () => undefined | (() => void)
+    unsubscribe?: () => void
   }
 
   type LazyUpdate<T> = {
@@ -514,10 +515,11 @@
   }
 
   const runEffect = (effect: Effect) => {
-    effect.state_[TRACKED_EXECUTE](effect, effect.fn)
+    effect.unsubscribe?.()
+    effect.unsubscribe = effect.state_[TRACKED_EXECUTE](effect, effect.fn)
   }
 
-  const useEffect = (fn: () => void) => {
+  const useEffect = (fn: () => undefined | (() => void)) => {
     const componentId = componentIdStack[componentIdStack.length - 1]
     assert?.(typeof componentId !== 'undefined')
 
@@ -1107,7 +1109,9 @@
           }
           case 'className': {
             lazy(instance, nextProps[key], (value) => {
-              (instance.element_.className as any) = stringifyClassNames(value ?? '')
+              ;(instance.element_.className as any) = stringifyClassNames(
+                value ?? ''
+              )
             })
             continue
           }

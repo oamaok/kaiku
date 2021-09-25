@@ -159,6 +159,44 @@ describe('kaiku', () => {
     expect(element.getAttribute('name')).toBe('bar')
   })
 
+  it('should properly call unsubcribe function of an effect if returned', async () => {
+    const effectCallCounter = jest.fn()
+    const effectUnsubscribeCallCounter = jest.fn()
+
+    const state = createState({ a: 0 })
+
+    const App = () => {
+      useEffect(() => {
+        effectCallCounter()
+        if (state.a === 1) {
+          return effectUnsubscribeCallCounter
+        }
+      })
+
+      return <div />
+    }
+
+    render(<App />, rootNode, state)
+
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+    expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(0)
+
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+    expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(0)
+
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(3)
+    expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(1)
+
+    state.a++
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(4)
+    expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(1)
+  })
+
   it('should fire useEffect hooks properly', async () => {
     const effectCallCounter = jest.fn()
 
