@@ -38,11 +38,14 @@
 
   type Context<StateT extends {}> = {
     state_: State<StateT>
+    svgNs: boolean
   }
 
   type FragmentProperties = { key?: string | number }
 
-  type HtmlElementTagName = keyof HTMLElementTagNameMap
+  type HtmlElementTagName =
+    | keyof HTMLElementTagNameMap
+    | keyof SVGElementTagNameMap
   type HtmlElementProperties = Record<string, any> & {
     style?: Record<string, string>
     className?: ClassNames
@@ -124,7 +127,7 @@
   type HtmlElementInstance = {
     tag_: typeof HtmlElementTag
     tagName_: HtmlElementTagName
-    element_: HTMLElement
+    element_: HTMLElement | SVGElement
     props: HtmlElementProperties
     context_: Context<{}>
     parentElement_: HtmlElementInstance | null
@@ -381,8 +384,8 @@
 
           if (trackedDependencyStack.length) {
             const dependencyKey = (id +
-              ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
-                0x4000000)) as StateKey
+              (keyToId[key] || (keyToId[key] = ++nextKeyId)) *
+                0x4000000) as StateKey
             trackedDependencyStack[trackedDependencyStack.length - 1].add(
               dependencyKey
             )
@@ -431,8 +434,8 @@
           }
 
           const dependencyKey = (id +
-            ((keyToId[key] || (keyToId[key] = ++nextKeyId)) *
-              0x4000000)) as StateKey
+            (keyToId[key] || (keyToId[key] = ++nextKeyId)) *
+              0x4000000) as StateKey
           updatedDependencies.push(dependencyKey)
           if (!deferredUpdateQueued) {
             deferredUpdateQueued = true
@@ -633,13 +636,9 @@
 
     if (
       instance.tag_ === HtmlElementTag &&
-      descriptor.tag_ === HtmlElementTag
+      descriptor.tag_ === HtmlElementTag &&
+      instance.tagName_ === descriptor.tagName_
     ) {
-      if (instance.tagName_ !== descriptor.tagName_) {
-        instance.element_.parentElement?.removeChild(instance.element_)
-        repurposeHtmlElementInstance(instance, descriptor)
-      }
-
       updateHtmlElementInstance(
         instance,
         descriptor.props,
@@ -1006,8 +1005,20 @@
     descriptor: HtmlElementDescriptor,
     context_: Context<{}>
   ): HtmlElementInstance => {
+    const useSvgNs = descriptor.tagName_ === 'svg' || context_.svgNs
+
+    if (context_.svgNs !== useSvgNs) {
+      context_ = { svgNs: useSvgNs, state_: context_.state_ }
+    }
+
     const element_ =
-      descriptor.existingElement || document.createElement(descriptor.tagName_)
+      descriptor.existingElement ||
+      (useSvgNs
+        ? document.createElementNS(
+            'http://www.w3.org/2000/svg',
+            descriptor.tagName_
+          )
+        : document.createElement(descriptor.tagName_))
 
     const instance: HtmlElementInstance = {
       tag_: HtmlElementTag,
@@ -1022,24 +1033,6 @@
     }
 
     updateHtmlElementInstance(instance, descriptor.props, descriptor.children_)
-
-    return instance
-  }
-
-  const repurposeHtmlElementInstance = (
-    instance: HtmlElementInstance,
-    descriptor: HtmlElementDescriptor
-  ) => {
-    const element_ =
-      descriptor.existingElement || document.createElement(descriptor.tagName_)
-
-    instance.tagName_ = descriptor.tagName_
-    instance.element_ = element_
-    instance.parentElement_ = null
-    instance.nextSibling_ = null
-    instance.props = EMPTY_OBJECT
-    instance.children_ = null
-    instance.lazyUpdates = []
 
     return instance
   }
@@ -1114,7 +1107,7 @@
           }
           case 'className': {
             lazy(instance, nextProps[key], (value) => {
-              instance.element_.className = stringifyClassNames(value ?? '')
+              (instance.element_.className as any) = stringifyClassNames(value ?? '')
             })
             continue
           }
@@ -1178,7 +1171,7 @@
 
   const getNextSiblingElement = (
     instance: NodeInstance<any>
-  ): HTMLElement | Text | null => {
+  ): HTMLElement | SVGElement | Text | null => {
     switch (instance.tag_) {
       case ClassComponentTag:
       case FunctionComponentTag: {
@@ -1374,6 +1367,7 @@
       children_: null,
       context_: {
         state_,
+        svgNs: false,
       },
       parentElement_: null,
       nextSibling_: null,
@@ -1383,6 +1377,7 @@
 
     const rootComponentInstance = createNodeInstance(descriptor, {
       state_,
+      svgNs: false,
     })
 
     mountNodeInstance(rootComponentInstance, rootElementInstance, null)
