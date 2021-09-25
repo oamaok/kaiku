@@ -25,14 +25,6 @@
   const IMMUTABLE_FLAG = Symbol()
   const STATE_FLAG = Symbol()
 
-  const ClassComponentTag = 0
-  const FunctionComponentTag = 1
-  const HtmlElementTag = 2
-  const FragmentTag = 3
-  const TextNodeTag = 4
-  const EffectTag = 5
-  const LazyUpdateTag = 6
-
   type StateKey = number & { __: 'StateKey' }
   type DependeeId = number & { __: 'DependeeId' }
 
@@ -314,7 +306,12 @@
           }
 
           updatedDependees.add(dependeeId)
-          updateDependee(currentDependees.get(dependeeId)!)
+
+          // FIXME: Technically this check shouldn't be needed, right?
+          const dependee = currentDependees.get(dependeeId)
+          if (dependee) {
+            updateDependee(dependee)
+          }
         }
       }
     }
@@ -813,15 +810,14 @@
 
     if (!instance.child) {
       instance.child = createNodeInstance(childDescriptor, instance.context_)
-      return
-    }
+    } else {
+      const wasReused = reuseNodeInstance(instance.child, childDescriptor)
 
-    const wasReused = reuseNodeInstance(instance.child, childDescriptor)
-
-    if (!wasReused) {
-      unmountNodeInstance(instance.child)
-      const newChild = createNodeInstance(childDescriptor, instance.context_)
-      instance.child = newChild
+      if (!wasReused) {
+        unmountNodeInstance(instance.child)
+        const newChild = createNodeInstance(childDescriptor, instance.context_)
+        instance.child = newChild
+      }
     }
 
     if (instance.parentElement_) {
@@ -1223,6 +1219,9 @@
     parentElement: HtmlElementInstance,
     nextSibling: NodeInstance<any> | null
   ) => {
+    assert?.(instance)
+    assert?.(parentElement)
+
     switch (instance.tag_) {
       case ClassComponentTag:
       case FunctionComponentTag: {

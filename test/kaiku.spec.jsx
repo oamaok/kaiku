@@ -875,4 +875,55 @@ describe('kaiku', () => {
 
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should handle nested components mounting and unmounting', async () => {
+    const state = createState({
+      a: false,
+      b: false,
+    })
+
+    const A = () => <div>Hello world</div>
+    const B = () => {
+      if (state.a) return <A />
+      return null
+    }
+    const C = () => {
+      if (state.b) return <B />
+      return null
+    }
+    const App = () => {
+      return (
+        <div>
+          <C />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.a = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.b = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.a = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.a = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.b = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.a = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
 })
