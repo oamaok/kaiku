@@ -511,6 +511,14 @@
   const destroyHooks = (componentId: DependeeId) => {
     componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
     componentStates.delete(componentId)
+
+    const componentEffects = effects.get(componentId)
+    if (componentEffects) {
+      for (const effect of componentEffects) {
+        effect.unsubscribe?.()
+      }
+    }
+
     effects.delete(componentId)
   }
 
