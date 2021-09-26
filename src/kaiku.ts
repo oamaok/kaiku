@@ -24,6 +24,7 @@
   const CREATE_LOCAL_STATE = Symbol()
   const IMMUTABLE_FLAG = Symbol()
   const STATE_FLAG = Symbol()
+  const UNWRAP = Symbol()
 
   type StateKey = number & { __: 'StateKey' }
   type DependeeId = number & { __: 'DependeeId' }
@@ -180,7 +181,7 @@
     [CREATE_LOCAL_STATE]: <T extends object>(initialState: T) => State<T>
   }
 
-  type State<T> = T & StateInternals
+  type State<T> = T & { [UNWRAP]: T } & StateInternals
 
   type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
 
@@ -374,6 +375,8 @@
 
       const proxy = new Proxy(obj, {
         get(target, key) {
+          if (key === UNWRAP) return target
+
           if (key in internals) return internals[key as keyof typeof internals]
 
           if (typeof key === 'symbol') {
@@ -458,6 +461,10 @@
     const state = wrap(initialState)
 
     return state
+  }
+
+  const unwrap = <T>(state: State<T>): T => {
+    return state[UNWRAP]
   }
 
   const immutable = <T extends object>(obj: T): Immutable<T> => {
@@ -1404,6 +1411,7 @@
     useEffect,
     createState,
     immutable,
+    unwrap,
   }
 
   if (typeof module !== 'undefined') {
