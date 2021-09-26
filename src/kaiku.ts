@@ -385,8 +385,8 @@
 
           if (trackedDependencyStack.length) {
             const dependencyKey = (id +
-              (keyToId[key] || (keyToId[key] = ++nextKeyId)) *
-                0x4000000) as StateKey
+              (keyToId[key] ||
+                (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
             trackedDependencyStack[trackedDependencyStack.length - 1].add(
               dependencyKey
             )
@@ -401,8 +401,19 @@
           return value
         },
 
+        ownKeys(target) {
+          if (trackedDependencyStack.length) {
+            trackedDependencyStack[trackedDependencyStack.length - 1].add(
+              id as StateKey
+            )
+          }
+
+          return Object.keys(target)
+        },
+
         set(target, _key, value) {
           const key = _key as keyof T
+          const isNewKeyForTarget = typeof target[key] === 'undefined'
 
           if (
             !(isArray && key === 'length') &&
@@ -434,9 +445,15 @@
             return true
           }
 
+          // When setting for the first time, add the value itself as dependency
+          // to account for e.g. `Object.keys` updates
+          if (isNewKeyForTarget) {
+            updatedDependencies.push(id as StateKey)
+          }
+
           const dependencyKey = (id +
-            (keyToId[key] || (keyToId[key] = ++nextKeyId)) *
-              0x4000000) as StateKey
+            (keyToId[key] ||
+              (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
           updatedDependencies.push(dependencyKey)
           if (!deferredUpdateQueued) {
             deferredUpdateQueued = true

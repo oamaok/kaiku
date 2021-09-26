@@ -926,4 +926,35 @@ describe('kaiku', () => {
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should handle updates with Object.keys', async () => {
+    const state = createState({
+      obj: {}
+    })
+
+    const App = () => {
+      const keys = Object.keys(state.obj)
+
+      return (
+        <div>
+          {keys.map(key => <span>{state.obj[key]}</span>)}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.obj.a = 'foo'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.obj.b = 'bar'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.obj.b = 'foobar'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
 })

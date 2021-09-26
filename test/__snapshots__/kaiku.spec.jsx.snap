@@ -62,6 +62,14 @@ exports[`kaiku should handle updates in an array within a lazy child efficiently
 
 exports[`kaiku should handle updates in an array within a lazy child efficiently 6`] = `"<div><div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div></div>"`;
 
+exports[`kaiku should handle updates with Object.keys 1`] = `"<div></div>"`;
+
+exports[`kaiku should handle updates with Object.keys 2`] = `"<div><span>foo</span></div>"`;
+
+exports[`kaiku should handle updates with Object.keys 3`] = `"<div><span>foo</span><span>bar</span></div>"`;
+
+exports[`kaiku should handle updates with Object.keys 4`] = `"<div><span>foo</span><span>foobar</span></div>"`;
+
 exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<div>I am the final child!</div>"`;
 
 exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;
