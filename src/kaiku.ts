@@ -1434,7 +1434,7 @@ function h(
   if (type[CLASS_COMPONENT_FLAG] as boolean) {
     return createClassComponentDescriptor(type, {
       ...(props || EMPTY_OBJECT),
-      children,
+      children: children.length === 0 ? undefined : children,
     })
   }
 
@@ -1444,7 +1444,7 @@ function h(
 
   return createFunctionComponentDescriptor(type, {
     ...(props || EMPTY_OBJECT),
-    children,
+    children: children.length === 0 ? undefined : children,
   })
 }
 
