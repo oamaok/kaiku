@@ -17,6 +17,7 @@
     "test": "yarn build && yarn test:dev && yarn test:minified",
     "test:minified": "KAIKU_VERSION=minified jest --coverage",
     "test:dev": "KAIKU_VERSION=development jest --coverage",
+    "typings": "tsc --project tsconfig.json",
     "build": "rm -rf dist/ && node build.js",
     "lint": "eslint src/*",
     "prettier": "prettier --write ."

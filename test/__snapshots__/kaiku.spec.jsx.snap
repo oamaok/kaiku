@@ -70,6 +70,10 @@ exports[`kaiku should handle updates with Object.keys 3`] = `"<div><span>foo</sp
 
 exports[`kaiku should handle updates with Object.keys 4`] = `"<div><span>foo</span><span>foobar</span></div>"`;
 
+exports[`kaiku should handle updates with Object.keys 5`] = `"<div><span>foobar</span></div>"`;
+
+exports[`kaiku should handle updates with Object.keys 6`] = `"<div><span>foobar</span><span>barfoo</span></div>"`;
+
 exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<div>I am the final child!</div>"`;
 
 exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;

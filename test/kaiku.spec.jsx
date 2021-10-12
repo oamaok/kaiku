@@ -929,7 +929,7 @@ describe('kaiku', () => {
 
   it('should handle updates with Object.keys', async () => {
     const state = createState({
-      obj: {}
+      obj: {},
     })
 
     const App = () => {
@@ -937,7 +937,9 @@ describe('kaiku', () => {
 
       return (
         <div>
-          {keys.map(key => <span>{state.obj[key]}</span>)}
+          {keys.map((key) => (
+            <span>{state.obj[key]}</span>
+          ))}
         </div>
       )
     }
@@ -954,6 +956,14 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.obj.b = 'foobar'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    delete state.obj.a
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.obj.a = 'barfoo'
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
   })

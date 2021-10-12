@@ -5,44 +5,49 @@ const terser = require('terser')
 fs.mkdirSync('dist')
 fs.copyFileSync('src/package-entry.js', 'dist/index.js')
 
+const source = fs.readFileSync('./src/kaiku.ts').toString()
+
 console.log('Build development version')
 console.time(' - time')
-esbuild.buildSync({
-  entryPoints: ['src/kaiku.ts'],
-  outfile: 'dist/kaiku.dev.js',
-  define: {
-    __DEBUG__: true,
+fs.writeFileSync(
+  'dist/kaiku.dev.js',
+  esbuild.transformSync(source, {
+    loader: 'ts',
+    define: {
+      __DEBUG__: true,
 
-    ClassComponentTag: '"ClassComponent"',
-    FunctionComponentTag: '"FunctionComponent"',
-    HtmlElementTag: '"HtmlElement"',
-    FragmentTag: '"Fragment"',
-    TextNodeTag: '"TextNode"',
-    EffectTag: '"EffectTag"',
-    LazyUpdateTag: '"LazyUpdateTag"',
-  },
-})
+      ClassComponentTag: '"ClassComponent"',
+      FunctionComponentTag: '"FunctionComponent"',
+      HtmlElementTag: '"HtmlElement"',
+      FragmentTag: '"Fragment"',
+      TextNodeTag: '"TextNode"',
+      EffectTag: '"EffectTag"',
+      LazyUpdateTag: '"LazyUpdateTag"',
+    },
+  }).code
+)
 console.timeEnd(' - time')
 
 console.log('Build production version')
 console.time(' - time')
-
 let tagId = 0
-esbuild.buildSync({
-  entryPoints: ['src/kaiku.ts'],
-  outfile: 'dist/kaiku.js',
-  define: {
-    __DEBUG__: false,
+fs.writeFileSync(
+  'dist/kaiku.js',
+  esbuild.transformSync(source, {
+    loader: 'ts',
+    define: {
+      __DEBUG__: false,
 
-    ClassComponentTag: tagId++,
-    FunctionComponentTag: tagId++,
-    HtmlElementTag: tagId++,
-    FragmentTag: tagId++,
-    TextNodeTag: tagId++,
-    EffectTag: tagId++,
-    LazyUpdateTag: tagId++,
-  },
-})
+      ClassComponentTag: tagId++,
+      FunctionComponentTag: tagId++,
+      HtmlElementTag: tagId++,
+      FragmentTag: tagId++,
+      TextNodeTag: tagId++,
+      EffectTag: tagId++,
+      LazyUpdateTag: tagId++,
+    },
+  }).code
+)
 console.timeEnd(' - time')
 
 console.log('Minify production version')
@@ -57,6 +62,7 @@ terser
       booleans_as_integers: true,
     },
     mangle: {
+      module: true,
       properties: {
         reserved: [
           'h',
@@ -72,6 +78,7 @@ terser
           'componentWillUnmount',
           'Fragment',
           'state',
+          'props',
         ],
       },
     },

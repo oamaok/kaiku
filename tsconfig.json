@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     "outDir": "dist",
+    "moduleResolution": "node",
     "strict": true,
     "noImplicitAny": true,
     "downlevelIteration": true,
     "declaration": true,
+    "emitDeclarationOnly": true,
     "lib": ["esnext", "dom"]
   }
 }
