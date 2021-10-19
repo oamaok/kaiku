@@ -1377,6 +1377,9 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
       destroyLazyUpdates(instance)
       assert?.(instance.parentElement_)
       instance.parentElement_.element_.removeChild(instance.element_)
+      if (instance.children_) {
+        instance.children_.children_.forEach(unmountNodeInstance)
+      }
       break
     }
 
