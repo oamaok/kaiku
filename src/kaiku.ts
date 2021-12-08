@@ -358,6 +358,9 @@ const createState = <StateT extends object>(
         const dependees = keyToDependees.get(key)
         assert?.(dependees)
         dependees.delete(dependee.id_)
+        if (dependees.size === 0) {
+          keyToDependees.delete(key)
+        }
       }
     }
 
