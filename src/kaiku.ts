@@ -13,7 +13,7 @@
  *  - Some functions and members you see here have a underscore
  *    after their name; this does not signify any functional
  *    difference. It is to tell Terser (tool used to minify
- *    the library) that they are not build in methods, and
+ *    the library) that they are not built-in methods, and
  *    can be hence renamed.
  *
  */
