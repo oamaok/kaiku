@@ -632,11 +632,42 @@ describe('kaiku', () => {
 
   it('should handle multiple array children in different positions', () => {
     const App = () => (
-      <div>
-        {[0, 1, 2, 3]}
-        <span>foo</span>
-        {['a', 'b', 'c', 'd']}
-      </div>
+      <>
+        <div>
+          {[0, 1, 2, 3]}
+          <span>foo</span>
+          {['a', 'b', 'c', 'd']}
+        </div>
+        <div>
+          <h2>foo</h2>
+          {[]}
+          <button>bar</button>
+        </div>
+        <div>
+          <h2>foo</h2>
+          {[]}
+          {[]}
+          {[<span>foobar</span>]}
+          {[]}
+          {[]}
+          {[]}
+          {[]}
+          {[]}
+          <button>bar</button>
+        </div>
+        <div>
+          <h2>foo</h2>
+          {[]}
+          {[]}
+          {[<span>foobar</span>]}
+          {[]}
+          {[]}
+          {[<div>foobar</div>]}
+          {[]}
+          {[]}
+          <button>bar</button>
+        </div>
+      </>
     )
 
     render(<App />, rootNode)

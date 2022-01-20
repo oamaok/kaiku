@@ -22,7 +22,7 @@ exports[`kaiku should handle lazy children efficiently 3`] = `"<div><div>My coun
 
 exports[`kaiku should handle lazy children efficiently 4`] = `"<div><div>My counter is at 5</div><span>My counter is at 5</span></div>"`;
 
-exports[`kaiku should handle multiple array children in different positions 1`] = `"<div>0123<span>foo</span>abcd</div>"`;
+exports[`kaiku should handle multiple array children in different positions 1`] = `"<div>0123<span>foo</span>abcd</div><div><h2>foo</h2><button>bar</button></div><div><h2>foo</h2><span>foobar</span><button>bar</button></div><div><h2>foo</h2><span>foobar</span><div>foobar</div><button>bar</button></div>"`;
 
 exports[`kaiku should handle nested components mounting and unmounting 1`] = `"<div></div>"`;
 

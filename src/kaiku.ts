@@ -12,7 +12,7 @@
  *
  *  - Some functions and members you see here have a underscore
  *    after their name; this does not signify any functional
- *    difference. It is to tell Terser (tool used to minify
+ *    difference. It is to tell Terser (the tool used to minify
  *    the library) that they are not built-in methods, and
  *    can be hence renamed.
  *
@@ -1347,6 +1347,8 @@ const mountNodeInstance = <
     }
 
     case FragmentTag: {
+      instance.nextSibling_ = nextSibling
+
       for (const child of instance.children_) {
         mountNodeInstance(child, parentElement, nextSibling)
         nextSibling = child
