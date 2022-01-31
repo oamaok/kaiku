@@ -4,7 +4,7 @@
 
 ![CI](https://github.com/oamaok/kaiku/actions/workflows/main.yaml/badge.svg)
 
-From Finnish _kaiku_ (_/ˈkɑi̯ku/_), meaning _echo_.
+From Finnish _kaiku_ _/ˈkɑi̯ku/_, meaning _echo_.
 
 A lightweight JSX-based UI framework with a freely mutable, boilerplate-free global state management.
 
