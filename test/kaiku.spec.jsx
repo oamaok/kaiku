@@ -1059,4 +1059,28 @@ describe('kaiku', () => {
     await nextTick()
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
   })
+
+  it('should return an automatically correctly bound function when referring to function members in wrapped objects', async () => {
+    const state = createState({
+      obj: { a: function() { return this.b; }, b: 666 },
+    })
+
+    const bValueTracker = jest.fn()
+
+    const App = () => {
+      // Do we actually want to be creating new bound functions every time this is evaluated?
+      const bGetter = state.obj.a;
+      const bValue = bGetter();
+      bValueTracker(bValue)
+
+      return (
+        <div>
+          {bValue}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(bValueTracker).toHaveBeenCalledWith(666)
+  })
 })
