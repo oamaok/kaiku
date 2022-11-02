@@ -460,7 +460,7 @@ const createState = <StateT extends object>(
 
       set(target, _key, value) {
         const key = _key as keyof T
-        const isNewKeyForTarget = typeof target[key] === 'undefined'
+        const isNewKeyForTarget = !(key in target)
 
         if (
           !(isArray && key === 'length') &&
