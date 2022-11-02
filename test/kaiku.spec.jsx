@@ -197,6 +197,39 @@ describe('kaiku', () => {
     expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(1)
   })
 
+  it('should properly call unsubscribe function of an effect if surrounding component unmounts', async () => {
+    const state = createState({
+      obj: { a: true },
+    })
+
+    const cleanupFunctionCallCounter = jest.fn()
+
+    const Child = () => {
+      useEffect(() => {
+        return () => {
+          cleanupFunctionCallCounter();
+        }
+      })
+
+      return <div>child</div>
+    }
+
+    const App = () => {
+      return (
+        <div>
+          {state.obj.a && <Child />}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(0)
+
+    state.obj.a = false;
+    await nextTick()
+    expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(1)
+  })
+
   it('should fire useEffect hooks properly', async () => {
     const effectCallCounter = jest.fn()
 
