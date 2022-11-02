@@ -998,4 +998,32 @@ describe('kaiku', () => {
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should not rerender a component depending on Object.keys unless the keys actually change', async () => {
+    const state = createState({
+      obj: { a: undefined },
+    })
+
+    const reRenderCounter = jest.fn()
+
+    const App = () => {
+      reRenderCounter()
+      const keys = Object.keys(state.obj)
+
+      return (
+        <div>
+          {keys.map((key) => (
+            <span>{key}</span>
+          ))}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(reRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.obj.a = 'foo'
+    await nextTick()
+    expect(reRenderCounter).toHaveBeenCalledTimes(1)
+  })
 })
