@@ -197,6 +197,39 @@ describe('kaiku', () => {
     expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(1)
   })
 
+  it('should properly call unsubscribe function of an effect if surrounding component unmounts', async () => {
+    const state = createState({
+      obj: { a: true },
+    })
+
+    const cleanupFunctionCallCounter = jest.fn()
+
+    const Child = () => {
+      useEffect(() => {
+        return () => {
+          cleanupFunctionCallCounter();
+        }
+      })
+
+      return <div>child</div>
+    }
+
+    const App = () => {
+      return (
+        <div>
+          {state.obj.a && <Child />}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(0)
+
+    state.obj.a = false;
+    await nextTick()
+    expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(1)
+  })
+
   it('should fire useEffect hooks properly', async () => {
     const effectCallCounter = jest.fn()
 
@@ -1025,5 +1058,29 @@ describe('kaiku', () => {
     state.obj.a = 'foo'
     await nextTick()
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
+  })
+
+  it('should return an automatically correctly bound function when referring to function members in wrapped objects', async () => {
+    const state = createState({
+      obj: { a: function() { return this.b; }, b: 666 },
+    })
+
+    const bValueTracker = jest.fn()
+
+    const App = () => {
+      // Do we actually want to be creating new bound functions every time this is evaluated?
+      const bGetter = state.obj.a;
+      const bValue = bGetter();
+      bValueTracker(bValue)
+
+      return (
+        <div>
+          {bValue}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode, state)
+    expect(bValueTracker).toHaveBeenCalledWith(666)
   })
 })
