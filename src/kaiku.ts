@@ -18,9 +18,6 @@
  *
  */
 const CLASS_COMPONENT_FLAG = Symbol()
-const TRACKED_EXECUTE = Symbol()
-const REMOVE_DEPENDENCIES = Symbol()
-const CREATE_LOCAL_STATE = Symbol()
 const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
 const UNWRAP = Symbol()
@@ -28,8 +25,7 @@ const UNWRAP = Symbol()
 type StateKey = number & { __: 'StateKey' }
 type DependeeId = number & { __: 'DependeeId' }
 
-type Context<StateT extends {}> = {
-  state_: State<StateT>
+type Context = {
   svgNs: boolean
 }
 
@@ -98,7 +94,7 @@ type ClassComponentInstance<
 > = {
   id_: DependeeId
   tag_: typeof ClassComponentTag
-  context_: Context<{}>
+  context_: Context
   instance: Component<PropertiesT, StateT>
   props: WithIntrinsicProps<PropertiesT>
   child: NodeInstance<any> | null
@@ -110,7 +106,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   id_: DependeeId
   tag_: typeof FunctionComponentTag
   func: FunctionComponent<PropertiesT>
-  context_: Context<{}>
+  context_: Context
   props: WithIntrinsicProps<PropertiesT>
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
@@ -119,7 +115,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
 
 type FragmentInstance = {
   tag_: typeof FragmentTag
-  context_: Context<{}>
+  context_: Context
   props: FragmentProperties
   children_: NodeInstance<DefaultProps>[]
   childMap: Map<string | number, NodeInstance<DefaultProps>>
@@ -132,7 +128,7 @@ type HtmlElementInstance = {
   tagName_: HtmlElementTagName
   element_: HTMLElement | SVGElement
   props: HtmlElementProperties
-  context_: Context<{}>
+  context_: Context
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   children_: FragmentInstance | null
@@ -199,25 +195,13 @@ export type Child =
 
 export type Children = Child[]
 
-type StateInternals = {
-  [STATE_FLAG]: true
-  [TRACKED_EXECUTE]: <F extends (...args: any) => any>(
-    dependee: Dependee,
-    fn: F,
-    ...args: Parameters<F>
-  ) => ReturnType<F>
-  [REMOVE_DEPENDENCIES]: (dependee: Dependee) => void
-  [CREATE_LOCAL_STATE]: <T extends object>(initialState: T) => State<T>
-}
-
-type State<T> = T & { [UNWRAP]: T } & StateInternals
+type State<T> = T & { [UNWRAP]: T; [STATE_FLAG]: true }
 
 type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
 
 type Effect = {
   id_: DependeeId
   tag_: typeof EffectTag
-  state_: State<object>
   fn: () => void | (() => void)
   unsubscribe_?: () => void
 }
@@ -225,7 +209,6 @@ type Effect = {
 type LazyUpdate<T> = {
   id_: DependeeId
   tag_: typeof LazyUpdateTag
-  state_: State<object>
   prop: () => T
   handler: (value: T) => void
   lastValue: T | undefined
@@ -307,224 +290,203 @@ const updateDependee = (dependee: Dependee) => {
   }
 }
 
-const createState = <StateT extends object>(
-  initialState: StateT
-): State<StateT> => {
-  let nextObjectId = 0
-  let nextKeyId = 0
+let nextObjectId = 0
+let nextKeyId = 0
+const trackedDependencyStack: Set<StateKey>[] = []
+const currentDependees: Map<DependeeId, Dependee> = new Map()
+const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
+const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
 
-  const trackedDependencyStack: Set<StateKey>[] = []
-  const currentDependees: Map<DependeeId, Dependee> = new Map()
-  const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
-  const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
+const updatedDependencies: StateKey[] = []
+const keyToId: Record<any, number> = {}
 
-  const updatedDependencies: StateKey[] = []
-  const keyToId: Record<any, number> = {}
+let deferredUpdateQueued = false
 
-  let deferredUpdateQueued = false
+const deferredUpdate = () => {
+  deferredUpdateQueued = false
+  const updatedDependees = new Set<DependeeId>()
 
-  const deferredUpdate = () => {
-    deferredUpdateQueued = false
-    const updatedDependees = new Set<DependeeId>()
+  for (let key; (key = updatedDependencies.pop()); ) {
+    const dependees = keyToDependees.get(key)
+    if (!dependees) continue
+    for (const dependeeId of dependees) {
+      if (updatedDependees.has(dependeeId)) {
+        continue
+      }
 
-    for (let key; (key = updatedDependencies.pop()); ) {
+      updatedDependees.add(dependeeId)
+
+      // FIXME: Technically this check shouldn't be needed, right?
+      const dependee = currentDependees.get(dependeeId)
+      if (dependee) {
+        updateDependee(dependee)
+      }
+    }
+  }
+}
+
+const trackedExecute = <F extends (...args: any[]) => any>(
+  dependee: Dependee,
+  fn: F,
+  ...args: Parameters<F>
+): ReturnType<F> => {
+  currentDependees.set(dependee.id_, dependee)
+  const previousDependencies = dependeeToKeys.get(dependee.id_)
+  if (previousDependencies) {
+    for (const key of previousDependencies) {
       const dependees = keyToDependees.get(key)
-      if (!dependees) continue
-      for (const dependeeId of dependees) {
-        if (updatedDependees.has(dependeeId)) {
-          continue
-        }
-
-        updatedDependees.add(dependeeId)
-
-        // FIXME: Technically this check shouldn't be needed, right?
-        const dependee = currentDependees.get(dependeeId)
-        if (dependee) {
-          updateDependee(dependee)
-        }
+      assert?.(dependees)
+      dependees.delete(dependee.id_)
+      if (dependees.size === 0) {
+        keyToDependees.delete(key)
       }
     }
   }
 
-  const trackedExectute = <F extends (...args: any[]) => any>(
-    dependee: Dependee,
-    fn: F,
-    ...args: Parameters<F>
-  ): ReturnType<F> => {
-    currentDependees.set(dependee.id_, dependee)
-    const previousDependencies = dependeeToKeys.get(dependee.id_)
-    if (previousDependencies) {
-      for (const key of previousDependencies) {
-        const dependees = keyToDependees.get(key)
-        assert?.(dependees)
-        dependees.delete(dependee.id_)
-        if (dependees.size === 0) {
-          keyToDependees.delete(key)
-        }
-      }
+  trackedDependencyStack.push(new Set())
+  const result = fn(...args)
+  const dependencies = trackedDependencyStack.pop()
+
+  assert?.(dependencies)
+  dependeeToKeys.set(dependee.id_, dependencies)
+
+  for (const key of dependencies) {
+    let dependencies = keyToDependees.get(key)
+    if (!dependencies) {
+      dependencies = new Set()
+      keyToDependees.set(key, dependencies)
     }
+    dependencies.add(dependee.id_)
+  }
 
-    trackedDependencyStack.push(new Set())
-    const result = fn(...args)
-    const dependencies = trackedDependencyStack.pop()
+  return result
+}
 
-    assert?.(dependencies)
-    dependeeToKeys.set(dependee.id_, dependencies)
+const removeDependencies = (dependee: Dependee) => {
+  currentDependees.delete(dependee.id_)
+  dependeeToKeys.delete(dependee.id_)
+}
 
-    for (const key of dependencies) {
-      let dependencies = keyToDependees.get(key)
-      if (!dependencies) {
-        dependencies = new Set()
-        keyToDependees.set(key, dependencies)
+const createState = <T extends object>(obj: T): State<T> => {
+  const id = ++nextObjectId
+
+  const isArray = Array.isArray(obj)
+  let initializing = true
+
+  const proxy = new Proxy(obj, {
+    get(target, key) {
+      if (key === UNWRAP) return target
+
+      if (key === STATE_FLAG) return true
+
+      if (typeof key === 'symbol') {
+        return target[key as keyof T]
       }
-      dependencies.add(dependee.id_)
-    }
 
-    return result
-  }
-
-  const removeDependencies = (dependee: Dependee) => {
-    currentDependees.delete(dependee.id_)
-    dependeeToKeys.delete(dependee.id_)
-  }
-
-  const createLocalState = <T extends object>(initialState: T): State<T> => {
-    return wrap(initialState)
-  }
-
-  const internals: StateInternals = {
-    [STATE_FLAG]: true,
-    [TRACKED_EXECUTE]: trackedExectute,
-    [REMOVE_DEPENDENCIES]: removeDependencies,
-    [CREATE_LOCAL_STATE]: createLocalState,
-  }
-
-  const wrap = <T extends object>(obj: T): State<T> => {
-    const id = ++nextObjectId
-
-    const isArray = Array.isArray(obj)
-    let initializing = true
-
-    const proxy = new Proxy(obj, {
-      get(target, key) {
-        if (key === UNWRAP) return target
-
-        if (key in internals) return internals[key as keyof typeof internals]
-
-        if (typeof key === 'symbol') {
-          return target[key as keyof T]
-        }
-
-        if (trackedDependencyStack.length) {
-          const dependencyKey = (id +
-            (keyToId[key] ||
-              (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
-          trackedDependencyStack[trackedDependencyStack.length - 1].add(
-            dependencyKey
-          )
-        }
-
-        const value = target[key as keyof T]
-
-        if (!isArray && typeof value === 'function') {
-          return value.bind(target)
-        }
-
-        return value
-      },
-
-      deleteProperty(target, _key) {
-        const key = _key as keyof T
-
-        if (!initializing) {
-          updatedDependencies.push(id as StateKey)
-
-          if (!deferredUpdateQueued) {
-            deferredUpdateQueued = true
-            window.queueMicrotask(deferredUpdate)
-          }
-        }
-
-        return delete target[key]
-      },
-
-      ownKeys(target) {
-        if (trackedDependencyStack.length) {
-          trackedDependencyStack[trackedDependencyStack.length - 1].add(
-            id as StateKey
-          )
-        }
-
-        return Reflect.ownKeys(target)
-      },
-
-      set(target, _key, value) {
-        const key = _key as keyof T
-        const isNewKeyForTarget = !(key in target)
-
-        if (
-          !(isArray && key === 'length') &&
-          (value === null ||
-            typeof value !== 'object' ||
-            (value[STATE_FLAG] as boolean)) &&
-          target[key] === value
-        ) {
-          return true
-        }
-
-        if (typeof key === 'symbol') {
-          target[key] = value
-          return true
-        }
-
-        if (
-          value !== null &&
-          typeof value === 'object' &&
-          !(value[STATE_FLAG] as boolean) &&
-          !(value[IMMUTABLE_FLAG] as boolean)
-        ) {
-          target[key] = wrap(value)
-        } else {
-          target[key] = value
-        }
-
-        if (initializing) {
-          return true
-        }
-
-        // When setting for the first time, add the value itself as dependency
-        // to account for e.g. `Object.keys` updates
-        if (isNewKeyForTarget) {
-          updatedDependencies.push(id as StateKey)
-        }
-
+      if (trackedDependencyStack.length) {
         const dependencyKey = (id +
           (keyToId[key] ||
             (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
-        updatedDependencies.push(dependencyKey)
+        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+          dependencyKey
+        )
+      }
+
+      const value = target[key as keyof T]
+
+      if (!isArray && typeof value === 'function') {
+        return value.bind(target)
+      }
+
+      return value
+    },
+
+    deleteProperty(target, _key) {
+      const key = _key as keyof T
+
+      if (!initializing) {
+        updatedDependencies.push(id as StateKey)
+
         if (!deferredUpdateQueued) {
           deferredUpdateQueued = true
           window.queueMicrotask(deferredUpdate)
         }
-
-        return true
-      },
-    })
-
-    // Recursively wrap all fields of the object by invoking the `set()` function
-    const keys = Object.keys(obj) as (keyof T)[]
-    for (const key of keys) {
-      if (typeof proxy[key] === 'object') {
-        proxy[key] = proxy[key]
       }
+
+      return delete target[key]
+    },
+
+    ownKeys(target) {
+      if (trackedDependencyStack.length) {
+        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+          id as StateKey
+        )
+      }
+
+      return Reflect.ownKeys(target)
+    },
+
+    set(target, _key, value) {
+      const key = _key as keyof T
+      const isNewKeyForTarget = !(key in target)
+
+      if (
+        !(isArray && key === 'length') &&
+        (value === null ||
+          typeof value !== 'object' ||
+          (value[STATE_FLAG] as boolean)) &&
+        target[key] === value
+      ) {
+        return true
+      }
+
+      if (typeof key === 'symbol') {
+        target[key] = value
+        return true
+      }
+
+      if (
+        value !== null &&
+        typeof value === 'object' &&
+        !(value[STATE_FLAG] as boolean) &&
+        !(value[IMMUTABLE_FLAG] as boolean)
+      ) {
+        target[key] = createState(value)
+      } else {
+        target[key] = value
+      }
+
+      if (initializing) {
+        return true
+      }
+
+      // When setting for the first time, add the value itself as dependency
+      // to account for e.g. `Object.keys` updates
+      if (isNewKeyForTarget) {
+        updatedDependencies.push(id as StateKey)
+      }
+
+      const dependencyKey = (id +
+        (keyToId[key] || (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
+      updatedDependencies.push(dependencyKey)
+      if (!deferredUpdateQueued) {
+        deferredUpdateQueued = true
+        window.queueMicrotask(deferredUpdate)
+      }
+
+      return true
+    },
+  })
+
+  // Recursively wrap all fields of the object by invoking the `set()` function
+  const keys = Object.keys(obj) as (keyof T)[]
+  for (const key of keys) {
+    if (typeof proxy[key] === 'object') {
+      proxy[key] = proxy[key]
     }
-    initializing = false
-    return proxy as State<T>
   }
-
-  const state = wrap(initialState)
-
-  return state
+  initializing = false
+  return proxy as State<T>
 }
 
 const unwrap = <T>(state: State<T>): T => {
@@ -555,19 +517,14 @@ const componentStates = new Map<DependeeId, State<any>[]>()
 const componentStateIndexStack: number[] = []
 
 const componentIdStack: DependeeId[] = []
-const stateStack: State<object>[] = []
 const componentsThatHaveUpdatedAtLeastOnce = new Set<DependeeId>()
 
-const startHookTracking = (componentId: DependeeId, state: State<any>) => {
-  stateStack.push(state)
+const startHookTracking = (componentId: DependeeId) => {
   componentIdStack.push(componentId)
   componentStateIndexStack.push(0)
 }
 
 const stopHookTracking = () => {
-  const state = stateStack.pop()
-  assert?.(state)
-
   const refIndex = componentStateIndexStack.pop()
   assert?.(typeof refIndex !== 'undefined')
 
@@ -592,30 +549,34 @@ const destroyHooks = (componentId: DependeeId) => {
 
 const runEffect = (effect: Effect) => {
   effect.unsubscribe_?.()
-  effect.unsubscribe_ = effect.state_[TRACKED_EXECUTE](effect, effect.fn) as
+  effect.unsubscribe_ = trackedExecute(effect, effect.fn) as
     | undefined
     | (() => void)
 }
 
 const useEffect = (fn: () => void | (() => void)) => {
-  const componentId = componentIdStack[componentIdStack.length - 1]
-  assert?.(typeof componentId !== 'undefined')
+  const componentId = componentIdStack[componentIdStack.length - 1] as
+    | DependeeId
+    | undefined
 
-  if (componentsThatHaveUpdatedAtLeastOnce.has(componentId)) {
+  if (
+    componentId !== undefined &&
+    componentsThatHaveUpdatedAtLeastOnce.has(componentId)
+  ) {
     return
   }
-
-  const state = stateStack[stateStack.length - 1] as State<object> | undefined
-  assert?.(state)
 
   const effect: Effect = {
     id_: ++nextDependeeId as DependeeId,
     tag_: EffectTag,
-    state_: state,
     fn,
   }
 
   runEffect(effect)
+
+  if (!componentId) {
+    return
+  }
 
   let componentEffects = effects.get(componentId)
   if (!componentEffects) {
@@ -631,9 +592,7 @@ const useState = <T extends object>(initialState: T): State<T> => {
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
   ]++
-  const state = stateStack[stateStack.length - 1] as State<object> | undefined
 
-  assert?.(state)
   assert?.(typeof componentId !== 'undefined')
 
   let states = componentStates.get(componentId)
@@ -647,7 +606,7 @@ const useState = <T extends object>(initialState: T): State<T> => {
     return states[componentStateIndex]
   }
 
-  const componentState = state[CREATE_LOCAL_STATE](initialState)
+  const componentState = createState(initialState)
 
   states.push(componentState)
 
@@ -771,20 +730,18 @@ const createClassComponentInstance = <
   StateT extends {} | undefined = undefined
 >(
   descriptor: ClassComponentDescriptor<PropertiesT, StateT>,
-  context: Context<{}>
+  context: Context
 ): ClassComponentInstance<PropertiesT, StateT> => {
   const id = ++nextDependeeId as DependeeId
 
-  startHookTracking(id, context.state_)
+  startHookTracking(id)
   const classInstance = new descriptor.class_(descriptor.props)
   stopHookTracking()
 
   classInstance.render = classInstance.render.bind(classInstance)
 
   if (typeof classInstance.state !== 'undefined') {
-    classInstance.state = context.state_[CREATE_LOCAL_STATE](
-      classInstance.state
-    ) as any
+    classInstance.state = createState(classInstance.state) as any
   }
   const instance: ClassComponentInstance<PropertiesT, StateT> = {
     id_: id,
@@ -818,7 +775,7 @@ const createFunctionComponentDescriptor = <PropertiesT extends DefaultProps>(
 
 const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
   descriptor: FunctionComponentDescriptor<PropertiesT>,
-  context: Context<{}>
+  context: Context
 ): FunctionComponentInstance<PropertiesT> => {
   const instance: FunctionComponentInstance<PropertiesT> = {
     id_: ++nextDependeeId as DependeeId,
@@ -865,20 +822,12 @@ const updateComponentInstance = <
 
   let childDescriptor
   if (instance.tag_ === FunctionComponentTag) {
-    startHookTracking(instance.id_, instance.context_.state_)
-    childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
-      instance,
-      instance.func,
-      instance.props
-    )
+    startHookTracking(instance.id_)
+    childDescriptor = trackedExecute(instance, instance.func, instance.props)
     stopHookTracking()
   } else {
     instance.instance.props = props
-    childDescriptor = instance.context_.state_[TRACKED_EXECUTE](
-      instance,
-      instance.instance.render,
-      props
-    )
+    childDescriptor = trackedExecute(instance, instance.instance.render, props)
   }
 
   if (!childDescriptor) {
@@ -926,7 +875,7 @@ const createFragmentDescriptor = (
 
 const createFragmentInstance = (
   descriptor: FragmentDescriptor,
-  context_: Context<{}>
+  context_: Context
 ): FragmentInstance => {
   const instance: FragmentInstance = {
     tag_: FragmentTag,
@@ -1008,9 +957,9 @@ const createTextInstance = (descriptor: TextDescriptor): TextInstance => {
 ///////////////
 
 const runLazyUpdate = <T>(lazyUpdate: LazyUpdate<T>) => {
-  const { state_, prop, handler, lastValue } = lazyUpdate
+  const { prop, handler, lastValue } = lazyUpdate
 
-  const value = state_[TRACKED_EXECUTE](lazyUpdate, prop)
+  const value = trackedExecute(lazyUpdate, prop)
   if (value !== lastValue) {
     lazyUpdate.lastValue = value
     handler(value)
@@ -1033,7 +982,6 @@ const lazy = <T>(
     lastValue: undefined,
     prop: prop as () => T,
     handler,
-    state_: instance.context_.state_,
   }
 
   runLazyUpdate(lazyUpdate)
@@ -1043,7 +991,7 @@ const lazy = <T>(
 
 const destroyLazyUpdates = (instance: HtmlElementInstance) => {
   for (let lazyUpdate; (lazyUpdate = instance.lazyUpdates.pop()); ) {
-    lazyUpdate.state_[REMOVE_DEPENDENCIES](lazyUpdate)
+    removeDependencies(lazyUpdate)
   }
 }
 
@@ -1086,12 +1034,12 @@ const createHtmlElementDescriptor = (
 
 const createHtmlElementInstance = (
   descriptor: HtmlElementDescriptor,
-  context_: Context<{}>
+  context_: Context
 ): HtmlElementInstance => {
   const useSvgNs = descriptor.tagName_ === 'svg' || context_.svgNs
 
   if (context_.svgNs !== useSvgNs) {
-    context_ = { svgNs: useSvgNs, state_: context_.state_ }
+    context_ = { svgNs: useSvgNs }
   }
 
   const element_ =
@@ -1244,7 +1192,7 @@ const updateHtmlElementInstance = (
 
 const createNodeInstance = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  context: Context<{}>
+  context: Context
 ): NodeInstance<PropertiesT> => {
   switch (descriptor.tag_) {
     case ClassComponentTag:
@@ -1361,7 +1309,7 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
     case FunctionComponentTag: {
       destroyHooks(instance.id_)
-      instance.context_.state_[REMOVE_DEPENDENCIES](instance)
+      removeDependencies(instance)
       if (instance.child) {
         unmountNodeInstance(instance.child)
       }
@@ -1371,7 +1319,7 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     case ClassComponentTag: {
       destroyHooks(instance.id_)
       instance.instance.componentWillUnmount()
-      instance.context_.state_[REMOVE_DEPENDENCIES](instance)
+      removeDependencies(instance)
       if (instance.child) {
         unmountNodeInstance(instance.child)
       }
@@ -1456,10 +1404,9 @@ function h(
   })
 }
 
-const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
+const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  element: HTMLElement,
-  state_: State<StateT> = createState({}) as State<StateT>
+  element: HTMLElement
 ) => {
   const rootElementInstance: HtmlElementInstance = {
     tag_: HtmlElementTag,
@@ -1467,7 +1414,6 @@ const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
     element_: element,
     children_: null,
     context_: {
-      state_,
       svgNs: false,
     },
     parentElement_: null,
@@ -1477,7 +1423,6 @@ const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
   }
 
   const rootComponentInstance = createNodeInstance(descriptor, {
-    state_,
     svgNs: false,
   })
 

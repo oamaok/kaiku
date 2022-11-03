@@ -34,10 +34,18 @@ const {
 const nextTick = () => new Promise(process.nextTick)
 
 let rootNode
+let secondRootNode
 beforeEach(() => {
-  if (rootNode) document.body.removeChild(rootNode)
-  rootNode = document.createElement('div')
-  document.body.appendChild(rootNode)
+  ;[rootNode, secondRootNode].forEach((node) => {
+    if (node) document.body.removeChild(node)
+  })
+  ;[rootNode, secondRootNode] = [
+    document.createElement('div'),
+    document.createElement('div'),
+  ]
+  ;[rootNode, secondRootNode].forEach((node) => {
+    document.body.appendChild(node)
+  })
 })
 
 describe('kaiku', () => {
@@ -46,11 +54,9 @@ describe('kaiku', () => {
   })
 
   it('should render a span to body', async () => {
-    const state = createState({})
-
     const App = () => <span id="test">Hello world!</span>
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     const span = document.getElementById('test')
 
@@ -76,7 +82,7 @@ describe('kaiku', () => {
       </div>
     )
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     const displayElem = document.querySelector('#display')
     const buttonElem = document.querySelector('button')
@@ -143,7 +149,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<Component />, rootNode, state)
+    render(<Component />, rootNode)
 
     const element = document.querySelector('#test')
 
@@ -157,6 +163,58 @@ describe('kaiku', () => {
     expect(propUpdateCounter).toHaveBeenCalledTimes(2)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
     expect(element.getAttribute('name')).toBe('bar')
+  })
+
+  it('should support multiple render roots', async () => {
+    const state = createState({
+      forFirst: { foo: 'yes' },
+      forSecond: { foo: 'yes' },
+    })
+
+    const firstAppRenderCounter = jest.fn()
+    const secondAppRenderCounter = jest.fn()
+
+    const FirstApp = () => {
+      firstAppRenderCounter()
+      return <span id="test1">{state.forFirst.foo}</span>
+    }
+    const SecondApp = () => {
+      secondAppRenderCounter()
+      return <span id="test2">{state.forSecond.foo}</span>
+    }
+
+    render(<FirstApp />, rootNode)
+    render(<SecondApp />, secondRootNode)
+
+    const span1 = document.getElementById('test1')
+    const span2 = document.getElementById('test2')
+
+    expect(span1.innerHTML).toBe('yes')
+    expect(span2.innerHTML).toBe('yes')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(1)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.forFirst.foo = 'no'
+    await nextTick()
+    expect(span1.innerHTML).toBe('no')
+    expect(span2.innerHTML).toBe('yes')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.forSecond.foo = 'maybe'
+    await nextTick()
+    expect(span1.innerHTML).toBe('no')
+    expect(span2.innerHTML).toBe('maybe')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(2)
+
+    state.forFirst = { foo: 'totally different' }
+    state.forSecond = { foo: 'bruhaha' }
+    await nextTick()
+    expect(span1.innerHTML).toBe('totally different')
+    expect(span2.innerHTML).toBe('bruhaha')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(3)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(3)
   })
 
   it('should properly call unsubcribe function of an effect if returned', async () => {
@@ -176,7 +234,7 @@ describe('kaiku', () => {
       return <div />
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     expect(effectCallCounter).toHaveBeenCalledTimes(1)
     expect(effectUnsubscribeCallCounter).toHaveBeenCalledTimes(0)
@@ -252,7 +310,7 @@ describe('kaiku', () => {
       return <div>{state.c}</div>
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(effectCallCounter).toHaveBeenCalledTimes(1)
 
     // Updating `state.c` shouldn't affect things, so let's litter them around
@@ -296,6 +354,34 @@ describe('kaiku', () => {
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
 
+  it('should fire useEffect hooks properly when called outside a component', async () => {
+    const externalEffectCallTracker = jest.fn()
+    const externalCleanupCallTracker = jest.fn()
+
+    const state = createState({
+      a: 0,
+    })
+
+    useEffect(() => {
+      externalEffectCallTracker(state.a)
+      return externalCleanupCallTracker
+    })
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(1, 0)
+
+    state.a++
+    await nextTick()
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(2, 1)
+    expect(externalCleanupCallTracker).toHaveBeenCalledTimes(1)
+
+    state.a++
+    await nextTick()
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(3, 2)
+    expect(externalCleanupCallTracker).toHaveBeenCalledTimes(2)
+  })
+
   it('should handle updates in an array efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
@@ -328,7 +414,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<List />, rootNode, state)
+    render(<List />, rootNode)
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
@@ -411,7 +497,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<List />, rootNode, state)
+    render(<List />, rootNode)
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
@@ -493,7 +579,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<List />, rootNode, state)
+    render(<List />, rootNode)
 
     expect(listRenderCounter).toHaveBeenCalledTimes(1)
     expect(itemRenderCounter).toHaveBeenCalledTimes(5)
@@ -533,7 +619,7 @@ describe('kaiku', () => {
       return <RecursiveComponent n={state.amount} />
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.amount = 1
@@ -551,7 +637,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -571,7 +657,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -595,7 +681,7 @@ describe('kaiku', () => {
       />
     )
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     const element = document.querySelector('#test')
     expect(element.className).toBe('always-here')
@@ -615,7 +701,7 @@ describe('kaiku', () => {
 
     const App = () => (state.foo ? <SpanChild /> : <DivChild />)
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.foo = true
@@ -639,7 +725,7 @@ describe('kaiku', () => {
       </div>
     )
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.foo = true
@@ -652,7 +738,7 @@ describe('kaiku', () => {
 
     const App = () => <div id="app">{state.a ? 'text' : <b>bold text</b>}</div>
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     for (let i = 0; i < 50; i++) {
       state.a = !state.a
@@ -745,7 +831,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     expect(componentRenderCounter).toBeCalledTimes(1)
     expect(lazySpanCallCounter).toBeCalledTimes(1)
@@ -816,7 +902,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     await nextTick()
 
     expect(firstEffectCall).toHaveBeenCalledTimes(2)
@@ -881,7 +967,7 @@ describe('kaiku', () => {
       }
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     expect(componentDidMountCall).toHaveBeenCalledWith('0')
 
@@ -915,7 +1001,7 @@ describe('kaiku', () => {
       return state.ticker === 0 ? <ClassComponent /> : null
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
 
     expect(componentDidMountCall).toHaveBeenCalledTimes(1)
     expect(componentWillUnmountCall).toHaveBeenCalledTimes(0)
@@ -963,7 +1049,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.a = true
@@ -1008,7 +1094,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.obj.a = 'foo'
@@ -1052,7 +1138,7 @@ describe('kaiku', () => {
       )
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
 
     state.obj.a = 'foo'
