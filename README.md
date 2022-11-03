@@ -22,7 +22,7 @@ Kaiku is packaged to be easily used in both browser and as a module, no build to
 
   const App = () => h('span', null, state.greeting)
 
-  render(h(App), document.body, state)
+  render(h(App), document.body)
 </script>
 ```
 
@@ -56,7 +56,7 @@ const Ticker = () => (
 
 setInterval(() => state.ticks++, 1000)
 
-render(<Ticker />, document.body, state)
+render(<Ticker />, document.body)
 ```
 
 ## Documentation
