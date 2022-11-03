@@ -34,10 +34,18 @@ const {
 const nextTick = () => new Promise(process.nextTick)
 
 let rootNode
+let secondRootNode
 beforeEach(() => {
-  if (rootNode) document.body.removeChild(rootNode)
-  rootNode = document.createElement('div')
-  document.body.appendChild(rootNode)
+  ;[rootNode, secondRootNode].forEach((node) => {
+    if (node) document.body.removeChild(node)
+  })
+  ;[rootNode, secondRootNode] = [
+    document.createElement('div'),
+    document.createElement('div'),
+  ]
+  ;[rootNode, secondRootNode].forEach((node) => {
+    document.body.appendChild(node)
+  })
 })
 
 describe('kaiku', () => {
@@ -157,6 +165,58 @@ describe('kaiku', () => {
     expect(propUpdateCounter).toHaveBeenCalledTimes(2)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
     expect(element.getAttribute('name')).toBe('bar')
+  })
+
+  it('should support multiple render roots', async () => {
+    const state = createState({
+      forFirst: { foo: 'yes' },
+      forSecond: { foo: 'yes' },
+    })
+
+    const firstAppRenderCounter = jest.fn()
+    const secondAppRenderCounter = jest.fn()
+
+    const FirstApp = () => {
+      firstAppRenderCounter()
+      return <span id="test1">{state.forFirst.foo}</span>
+    }
+    const SecondApp = () => {
+      secondAppRenderCounter()
+      return <span id="test2">{state.forSecond.foo}</span>
+    }
+
+    render(<FirstApp />, rootNode, state)
+    render(<SecondApp />, secondRootNode, state)
+
+    const span1 = document.getElementById('test1')
+    const span2 = document.getElementById('test2')
+
+    expect(span1.innerHTML).toBe('yes')
+    expect(span2.innerHTML).toBe('yes')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(1)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.forFirst.foo = 'no'
+    await nextTick()
+    expect(span1.innerHTML).toBe('no')
+    expect(span2.innerHTML).toBe('yes')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.forSecond.foo = 'maybe'
+    await nextTick()
+    expect(span1.innerHTML).toBe('no')
+    expect(span2.innerHTML).toBe('maybe')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(2)
+
+    state.forFirst = { foo: 'totally different' }
+    state.forSecond = { foo: 'bruhaha' }
+    await nextTick()
+    expect(span1.innerHTML).toBe('totally different')
+    expect(span2.innerHTML).toBe('bruhaha')
+    expect(firstAppRenderCounter).toHaveBeenCalledTimes(3)
+    expect(secondAppRenderCounter).toHaveBeenCalledTimes(3)
   })
 
   it('should properly call unsubcribe function of an effect if returned', async () => {
