@@ -25,8 +25,7 @@ const UNWRAP = Symbol()
 type StateKey = number & { __: 'StateKey' }
 type DependeeId = number & { __: 'DependeeId' }
 
-type Context<StateT extends {}> = {
-  state_: State<StateT>
+type Context = {
   svgNs: boolean
 }
 
@@ -95,7 +94,7 @@ type ClassComponentInstance<
 > = {
   id_: DependeeId
   tag_: typeof ClassComponentTag
-  context_: Context<{}>
+  context_: Context
   instance: Component<PropertiesT, StateT>
   props: WithIntrinsicProps<PropertiesT>
   child: NodeInstance<any> | null
@@ -107,7 +106,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   id_: DependeeId
   tag_: typeof FunctionComponentTag
   func: FunctionComponent<PropertiesT>
-  context_: Context<{}>
+  context_: Context
   props: WithIntrinsicProps<PropertiesT>
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
@@ -116,7 +115,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
 
 type FragmentInstance = {
   tag_: typeof FragmentTag
-  context_: Context<{}>
+  context_: Context
   props: FragmentProperties
   children_: NodeInstance<DefaultProps>[]
   childMap: Map<string | number, NodeInstance<DefaultProps>>
@@ -129,7 +128,7 @@ type HtmlElementInstance = {
   tagName_: HtmlElementTagName
   element_: HTMLElement | SVGElement
   props: HtmlElementProperties
-  context_: Context<{}>
+  context_: Context
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   children_: FragmentInstance | null
@@ -518,19 +517,14 @@ const componentStates = new Map<DependeeId, State<any>[]>()
 const componentStateIndexStack: number[] = []
 
 const componentIdStack: DependeeId[] = []
-const stateStack: State<object>[] = []
 const componentsThatHaveUpdatedAtLeastOnce = new Set<DependeeId>()
 
-const startHookTracking = (componentId: DependeeId, state: State<any>) => {
-  stateStack.push(state)
+const startHookTracking = (componentId: DependeeId) => {
   componentIdStack.push(componentId)
   componentStateIndexStack.push(0)
 }
 
 const stopHookTracking = () => {
-  const state = stateStack.pop()
-  assert?.(state)
-
   const refIndex = componentStateIndexStack.pop()
   assert?.(typeof refIndex !== 'undefined')
 
@@ -598,9 +592,7 @@ const useState = <T extends object>(initialState: T): State<T> => {
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
   ]++
-  const state = stateStack[stateStack.length - 1] as State<object> | undefined
 
-  assert?.(state)
   assert?.(typeof componentId !== 'undefined')
 
   let states = componentStates.get(componentId)
@@ -738,11 +730,11 @@ const createClassComponentInstance = <
   StateT extends {} | undefined = undefined
 >(
   descriptor: ClassComponentDescriptor<PropertiesT, StateT>,
-  context: Context<{}>
+  context: Context
 ): ClassComponentInstance<PropertiesT, StateT> => {
   const id = ++nextDependeeId as DependeeId
 
-  startHookTracking(id, context.state_)
+  startHookTracking(id)
   const classInstance = new descriptor.class_(descriptor.props)
   stopHookTracking()
 
@@ -783,7 +775,7 @@ const createFunctionComponentDescriptor = <PropertiesT extends DefaultProps>(
 
 const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
   descriptor: FunctionComponentDescriptor<PropertiesT>,
-  context: Context<{}>
+  context: Context
 ): FunctionComponentInstance<PropertiesT> => {
   const instance: FunctionComponentInstance<PropertiesT> = {
     id_: ++nextDependeeId as DependeeId,
@@ -830,7 +822,7 @@ const updateComponentInstance = <
 
   let childDescriptor
   if (instance.tag_ === FunctionComponentTag) {
-    startHookTracking(instance.id_, instance.context_.state_)
+    startHookTracking(instance.id_)
     childDescriptor = trackedExecute(instance, instance.func, instance.props)
     stopHookTracking()
   } else {
@@ -883,7 +875,7 @@ const createFragmentDescriptor = (
 
 const createFragmentInstance = (
   descriptor: FragmentDescriptor,
-  context_: Context<{}>
+  context_: Context
 ): FragmentInstance => {
   const instance: FragmentInstance = {
     tag_: FragmentTag,
@@ -1042,12 +1034,12 @@ const createHtmlElementDescriptor = (
 
 const createHtmlElementInstance = (
   descriptor: HtmlElementDescriptor,
-  context_: Context<{}>
+  context_: Context
 ): HtmlElementInstance => {
   const useSvgNs = descriptor.tagName_ === 'svg' || context_.svgNs
 
   if (context_.svgNs !== useSvgNs) {
-    context_ = { svgNs: useSvgNs, state_: context_.state_ }
+    context_ = { svgNs: useSvgNs }
   }
 
   const element_ =
@@ -1200,7 +1192,7 @@ const updateHtmlElementInstance = (
 
 const createNodeInstance = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  context: Context<{}>
+  context: Context
 ): NodeInstance<PropertiesT> => {
   switch (descriptor.tag_) {
     case ClassComponentTag:
@@ -1412,10 +1404,9 @@ function h(
   })
 }
 
-const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
+const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  element: HTMLElement,
-  state_: State<StateT> = createState({}) as State<StateT>
+  element: HTMLElement
 ) => {
   const rootElementInstance: HtmlElementInstance = {
     tag_: HtmlElementTag,
@@ -1423,7 +1414,6 @@ const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
     element_: element,
     children_: null,
     context_: {
-      state_,
       svgNs: false,
     },
     parentElement_: null,
@@ -1433,7 +1423,6 @@ const render: Render = <PropertiesT extends DefaultProps, StateT extends {}>(
   }
 
   const rootComponentInstance = createNodeInstance(descriptor, {
-    state_,
     svgNs: false,
   })
 
