@@ -296,6 +296,34 @@ describe('kaiku', () => {
     expect(effectCallCounter).toHaveBeenCalledTimes(5)
   })
 
+  it('should fire useEffect hooks properly when called outside a component', async () => {
+    const externalEffectCallTracker = jest.fn()
+    const externalCleanupCallTracker = jest.fn()
+
+    const state = createState({
+      a: 0,
+    })
+
+    useEffect(() => {
+      externalEffectCallTracker(state.a)
+      return externalCleanupCallTracker
+    })
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(1, 0)
+
+    state.a++
+    await nextTick()
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(2, 1)
+    expect(externalCleanupCallTracker).toHaveBeenCalledTimes(1)
+
+    state.a++
+    await nextTick()
+
+    expect(externalEffectCallTracker).toHaveBeenNthCalledWith(3, 2)
+    expect(externalCleanupCallTracker).toHaveBeenCalledTimes(2)
+  })
+
   it('should handle updates in an array efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
