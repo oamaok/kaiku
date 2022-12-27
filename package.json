@@ -13,7 +13,8 @@
   "files": [
     "src/*",
     "dist/*",
-    "jsx-runtime.d.ts"
+    "jsx-runtime.d.ts",
+    "jsx-runtime.js"
   ],
   "scripts": {
     "test": "yarn build && yarn test:dev && yarn test:minified",
