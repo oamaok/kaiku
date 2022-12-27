@@ -1,1 +1,1 @@
-export * from './dist/index'
+export { h as jsx } from './dist/kaiku'
