@@ -3,10 +3,10 @@ import { DefaultProps, NodeDescriptor } from './src/kaiku'
 declare namespace JSX {
   type Element<T extends DefaultProps> = NodeDescriptor<T>
   type ArrayElement = Element<any>[]
-  interface FunctionElement<T> {
+  interface FunctionElement<T extends DefaultProps> {
     (props: T): Element<T>
   }
-  interface ElementClass<T> {
+  interface ElementClass<T extends DefaultProps> {
     render(props: any): Element<T>
   }
   type ElementChildrenAttribute = {
