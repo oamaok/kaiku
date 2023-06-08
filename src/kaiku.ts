@@ -297,7 +297,7 @@ const currentDependees: Map<DependeeId, Dependee> = new Map()
 const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
 const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
 
-const updatedDependencies: StateKey[] = []
+let updatedDependencies: StateKey[] = []
 const keyToId: Record<any, number> = {}
 
 let deferredUpdateQueued = false
@@ -306,7 +306,10 @@ const deferredUpdate = () => {
   deferredUpdateQueued = false
   const updatedDependees = new Set<DependeeId>()
 
-  for (let key; (key = updatedDependencies.pop()); ) {
+  const keys = [...updatedDependencies]
+  updatedDependencies = []
+
+  for (const key of keys) {
     const dependees = keyToDependees.get(key)
     if (!dependees) continue
     for (const dependeeId of dependees) {
@@ -321,6 +324,31 @@ const deferredUpdate = () => {
       if (dependee) {
         updateDependee(dependee)
       }
+    }
+  }
+
+  if (updatedDependencies.length !== 0) {
+    deferredUpdateQueued = true
+
+    if (__DEBUG__) {
+      try {
+        deferredUpdate()
+      } catch (err) {
+        if (
+          // Chromium-based
+          err instanceof RangeError ||
+          // Firefox
+          (typeof InternalError !== 'undefined' && err instanceof InternalError)
+        ) {
+          throw new Error(
+            "useEffect loop detected! Make sure effects aren't continuously updating the same value."
+          )
+        } else {
+          throw err
+        }
+      }
+    } else {
+      deferredUpdate()
     }
   }
 }

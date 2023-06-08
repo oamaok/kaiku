@@ -9,6 +9,9 @@ const getKaiku = () => {
   }
 }
 
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 const getStack = () => {
   try {
     throw new Error()
@@ -265,7 +268,7 @@ describe('kaiku', () => {
     const Child = () => {
       useEffect(() => {
         return () => {
-          cleanupFunctionCallCounter();
+          cleanupFunctionCallCounter()
         }
       })
 
@@ -273,17 +276,13 @@ describe('kaiku', () => {
     }
 
     const App = () => {
-      return (
-        <div>
-          {state.obj.a && <Child />}
-        </div>
-      )
+      return <div>{state.obj.a && <Child />}</div>
     }
 
     render(<App />, rootNode, state)
     expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(0)
 
-    state.obj.a = false;
+    state.obj.a = false
     await nextTick()
     expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(1)
   })
@@ -1148,25 +1147,64 @@ describe('kaiku', () => {
 
   it('should return an automatically correctly bound function when referring to function members in wrapped objects', async () => {
     const state = createState({
-      obj: { a: function() { return this.b; }, b: 666 },
+      obj: {
+        a: function () {
+          return this.b
+        },
+        b: 666,
+      },
     })
 
     const bValueTracker = jest.fn()
 
     const App = () => {
       // Do we actually want to be creating new bound functions every time this is evaluated?
-      const bGetter = state.obj.a;
-      const bValue = bGetter();
+      const bGetter = state.obj.a
+      const bValue = bGetter()
       bValueTracker(bValue)
 
-      return (
-        <div>
-          {bValue}
-        </div>
-      )
+      return <div>{bValue}</div>
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(bValueTracker).toHaveBeenCalledWith(666)
+  })
+
+  it('should re-run dependent effects if one effect updates the dependency', async () => {
+    const firstEffectCounter = jest.fn()
+    const secondEffectCounter = jest.fn()
+
+    const state = createState({
+      a: 0,
+    })
+
+    useEffect(() => {
+      firstEffectCounter()
+
+      // Dependency to state.a
+      Object.assign({}, { a: state.a })
+    })
+
+    useEffect(() => {
+      secondEffectCounter()
+
+      if (state.a === 0) {
+        state.a++
+      } else if (state.a === 1) {
+        state.a++
+      }
+    })
+
+    expect(firstEffectCounter).toHaveBeenCalledTimes(1)
+    expect(secondEffectCounter).toHaveBeenCalledTimes(1)
+
+    await nextTick()
+    expect(firstEffectCounter).toHaveBeenCalledTimes(3)
+    expect(secondEffectCounter).toHaveBeenCalledTimes(3)
+
+    // No further calls expected
+    await nextTick()
+    expect(firstEffectCounter).toHaveBeenCalledTimes(3)
+    expect(secondEffectCounter).toHaveBeenCalledTimes(3)
   })
 })

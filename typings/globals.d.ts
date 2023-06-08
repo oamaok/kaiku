@@ -7,3 +7,5 @@ declare const FragmentTag = 'Fragment'
 declare const TextNodeTag = 'TextNode'
 declare const EffectTag = 'EffectTag'
 declare const LazyUpdateTag = 'LazyUpdateTag'
+
+declare const InternalError: typeof RangeError | undefined
