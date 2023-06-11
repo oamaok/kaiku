@@ -17,6 +17,17 @@
  *    can be hence renamed.
  *
  */
+
+// These are translated compile time into number tags, but in debug
+// builds they are strings.
+declare const ClassComponentTag = 'ClassComponent'
+declare const FunctionComponentTag = 'FunctionComponent'
+declare const HtmlElementTag = 'HtmlElement'
+declare const FragmentTag = 'Fragment'
+declare const TextNodeTag = 'TextNode'
+declare const EffectTag = 'EffectTag'
+declare const LazyUpdateTag = 'LazyUpdateTag'
+
 const CLASS_COMPONENT_FLAG = Symbol()
 const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
