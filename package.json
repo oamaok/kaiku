@@ -24,7 +24,7 @@
     "build": "rm -rf dist/ && node build.js",
     "lint": "eslint src/*",
     "prettier": "prettier --write .",
-    "prepublish": "yarn build && yarn test && yarn lint && yarn typings"
+    "prepublishOnly": "yarn build && yarn test && yarn lint && yarn typings"
   },
   "dependencies": {},
   "devDependencies": {
