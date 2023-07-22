@@ -17,9 +17,11 @@
     "jsx-runtime.js"
   ],
   "scripts": {
-    "test": "yarn build && yarn test:dev && yarn test:minified && cross-env KAIKU_JSX=1 yarn test:dev && cross-env KAIKU_JSX=1 yarn test:minified",
+    "test": "yarn build && yarn test:dev && yarn test:minified && yarn test:jsx:dev && yarn test:jsx:minified",
     "test:minified": "cross-env KAIKU_VERSION=minified jest --coverage",
     "test:dev": "cross-env KAIKU_VERSION=development jest --coverage",
+    "test:jsx:minified": "cross-env KAIKU_JSX=1 KAIKU_VERSION=minified jest --coverage",
+    "test:jsx:dev": "cross-env KAIKU_JSX=1 KAIKU_VERSION=development jest --coverage",
     "typings": "tsc --project tsconfig.json",
     "build": "rm -rf dist/ && node build.js",
     "lint": "eslint src/*",

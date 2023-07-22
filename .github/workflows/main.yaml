@@ -17,8 +17,17 @@ jobs:
         uses: actions/setup-node@v1
         with:
           node-version: '14.15.4'
-      - name: Install packages and run tests
-        run: |
-          yarn install
-          yarn lint
-          yarn test
+      - name: Install packages
+        run: yarn install
+      - name: Lint
+        run: yarn lint
+      - name: Build
+        run: yarn build
+      - name: Test (development)
+        run: yarn test:dev
+      - name: Test (minified)
+        run: yarn test:minified
+      - name: Test (development, JSX runtime)
+        run: yarn test:jsx:dev
+      - name: Test (minified, JSX runtime)
+        run: yarn test:jsx:minified
