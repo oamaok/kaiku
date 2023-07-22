@@ -1,1 +1,1 @@
-export { h as jsx } from './dist/kaiku'
+export { jsx, jsx as jsxs, Fragment } from './dist'
