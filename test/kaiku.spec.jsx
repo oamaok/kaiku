@@ -1025,6 +1025,31 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should handle fragments being unmounted', async () => {
+    const state = createState({ renderFragments: true })
+    const App = () => (
+      <div>
+        {state.renderFragments ? (
+          <>
+            <span>Hello</span>
+            <span>world!</span>
+          </>
+        ) : null}
+      </div>
+    )
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.renderFragments = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.renderFragments = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should handle nested components mounting and unmounting', async () => {
     const state = createState({
       a: false,
@@ -1272,5 +1297,33 @@ describe('kaiku', () => {
     state.checked = true
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should handle updates to input value', async () => {
+    const state = createState({
+      inputValue: '',
+    })
+
+    const App = () => {
+      return (
+        <div>
+          <input
+            type="text"
+            value={state.inputValue}
+            onChange={(evt) => {
+              state.inputValue = evt.target.value
+            }}
+          />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    const inputElem = document.querySelector('input')
+    expect(inputElem.value).toBe('')
+
+    state.inputValue = 'foobar'
+    await nextTick()
+    expect(inputElem.value).toBe('foobar')
   })
 })

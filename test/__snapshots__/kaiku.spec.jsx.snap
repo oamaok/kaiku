@@ -12,6 +12,12 @@ exports[`kaiku should handle component changing it's return tag 1`] = `"<div><di
 
 exports[`kaiku should handle component changing it's return tag 2`] = `"<div><span>Hello, I am a span tag!</span></div>"`;
 
+exports[`kaiku should handle fragments being unmounted 1`] = `"<div><span>Hello</span><span>world!</span></div>"`;
+
+exports[`kaiku should handle fragments being unmounted 2`] = `"<div></div>"`;
+
+exports[`kaiku should handle fragments being unmounted 3`] = `"<div><span>Hello</span><span>world!</span></div>"`;
+
 exports[`kaiku should handle function expressions as children 1`] = `"<div><span>Hello</span><span>world!</span></div>"`;
 
 exports[`kaiku should handle lazy children efficiently 1`] = `"<div><div>My counter is at 0</div><span>My counter is at 0</span></div>"`;
