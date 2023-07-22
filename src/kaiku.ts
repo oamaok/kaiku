@@ -1476,7 +1476,8 @@ function jsx(
     key,
   }
   let children = propsCopy.children
-  children = children && (Array.isArray(children) ? children : [children])
+  children = children !== undefined ?
+    (Array.isArray(children) ? children : [children]) : undefined
   propsCopy.children = children
 
   if (typeof type === 'string') {
@@ -1484,7 +1485,7 @@ function jsx(
     return createHtmlElementDescriptor(
       type as HtmlElementTagName,
       propsCopy,
-      children || []
+      children ?? []
     )
   }
 
@@ -1494,7 +1495,7 @@ function jsx(
 
   if (type === Fragment) {
     delete propsCopy.children
-    return createFragmentDescriptor(propsCopy, children || [])
+    return createFragmentDescriptor(propsCopy, children ?? [])
   }
 
   return createFunctionComponentDescriptor(type, propsCopy)
