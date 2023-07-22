@@ -1,7 +1,13 @@
 if (process.env.KAIKU_JSX) {
+  const nodeEnv = process.env.KAIKU_VERSION === "development"
+    ? "development" : "production"
   module.exports = {
     presets: ["@babel/preset-env"],
     plugins: [
+      [
+        "transform-define",
+        { "process.env.NODE_ENV": nodeEnv },
+      ],
       [
         "@babel/plugin-transform-react-jsx",
         { runtime: "automatic", importSource: "kaiku" }
