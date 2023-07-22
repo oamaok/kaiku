@@ -1,4 +1,4 @@
-if (process.env.KAIKU_JSX) {
+if (process.env.KAIKU_JSX_RUNTIME) {
   const nodeEnv = process.env.KAIKU_VERSION === "development"
     ? "development" : "production"
   module.exports = {
