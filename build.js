@@ -66,6 +66,7 @@ terser
       properties: {
         reserved: [
           'h',
+          'jsx',
           'render',
           'createState',
           'useEffect',

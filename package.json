@@ -17,7 +17,7 @@
     "jsx-runtime.js"
   ],
   "scripts": {
-    "test": "yarn build && yarn test:dev && yarn test:minified",
+    "test": "yarn build && yarn test:dev && yarn test:minified && cross-env KAIKU_JSX=1 yarn test:dev && cross-env KAIKU_JSX=1 yarn test:minified",
     "test:minified": "cross-env KAIKU_VERSION=minified jest --coverage",
     "test:dev": "cross-env KAIKU_VERSION=development jest --coverage",
     "typings": "tsc --project tsconfig.json",
