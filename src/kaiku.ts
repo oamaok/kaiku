@@ -1162,10 +1162,15 @@ const updateHtmlElementInstance = (
           }
           continue
         }
-        case 'selected': 
+        case 'disabled':
+        case 'selected':
         case 'checked': {
           lazy(instance, nextProps[key], (value) => {
-            ;(instance.element_ as any)[key] = value as boolean
+            if (!Boolean(value)) {
+              instance.element_.removeAttribute(key)
+            } else {
+              instance.element_.setAttribute(key, value)
+            }
           })
           continue
         }

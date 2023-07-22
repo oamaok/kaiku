@@ -1212,7 +1212,7 @@ describe('kaiku', () => {
     const state = createState({
       elemId: 'foo',
     })
-    
+
     const App = () => {
       return <div id={state.elemId} />
     }
@@ -1229,6 +1229,47 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.elemId = undefined
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should toggle attributes for certain boolean attributes', async () => {
+    const state = createState({
+      disabled: false,
+      selected: false,
+      checked: false,
+    })
+
+    const App = () => {
+      return (
+        <div>
+          <input type="text" disabled={state.disabled} />
+          <input type="checkbox" checked={state.disabled} />
+          <select>
+            <option selected={state.selected}></option>
+          </select>
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.disabled = true
+    state.selected = true
+    state.checked = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.disabled = false
+    state.selected = false
+    state.checked = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.disabled = true
+    state.selected = true
+    state.checked = true
     await nextTick()
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
