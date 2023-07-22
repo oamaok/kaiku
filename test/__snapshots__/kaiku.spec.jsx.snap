@@ -78,6 +78,14 @@ exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<
 
 exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;
 
+exports[`kaiku should remove an attribute if value is set to undefined 1`] = `"<div id=\\"foo\\"></div>"`;
+
+exports[`kaiku should remove an attribute if value is set to undefined 2`] = `"<div></div>"`;
+
+exports[`kaiku should remove an attribute if value is set to undefined 3`] = `"<div id=\\"bar\\"></div>"`;
+
+exports[`kaiku should remove an attribute if value is set to undefined 4`] = `"<div></div>"`;
+
 exports[`kaiku should render fragments perfectly 1`] = `"<span>Hello</span><span>world!</span>"`;
 
 exports[`kaiku should update a simple counter 1`] = `"<div class=\\"app\\"><span id=\\"display\\">The counter is at 0</span><button>Add one!</button></div>"`;

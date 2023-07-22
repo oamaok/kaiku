@@ -1207,4 +1207,29 @@ describe('kaiku', () => {
     expect(firstEffectCounter).toHaveBeenCalledTimes(3)
     expect(secondEffectCounter).toHaveBeenCalledTimes(3)
   })
+
+  it('should remove an attribute if value is set to undefined', async () => {
+    const state = createState({
+      elemId: 'foo',
+    })
+    
+    const App = () => {
+      return <div id={state.elemId} />
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.elemId = undefined
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.elemId = 'bar'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.elemId = undefined
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
 })

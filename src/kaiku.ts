@@ -1162,16 +1162,10 @@ const updateHtmlElementInstance = (
           }
           continue
         }
+        case 'selected': 
         case 'checked': {
-          lazy(instance, nextProps.checked, (value) => {
-            ;(instance.element_ as HTMLInputElement).checked = value as boolean
-          })
-          continue
-        }
-        case 'selected': {
-          lazy(instance, nextProps.selected, (value) => {
-            ;(instance.element_ as HTMLOptionElement).selected =
-              value as boolean
+          lazy(instance, nextProps[key], (value) => {
+            ;(instance.element_ as any)[key] = value as boolean
           })
           continue
         }
@@ -1193,7 +1187,11 @@ const updateHtmlElementInstance = (
 
       if (key in nextProps) {
         lazy(instance, nextProps[key] as LazyProperty<string>, (value) => {
-          instance.element_.setAttribute(key, value)
+          if (typeof value === 'undefined') {
+            instance.element_.removeAttribute(key)
+          } else {
+            instance.element_.setAttribute(key, value)
+          }
         })
       } else {
         instance.element_.removeAttribute(key)
