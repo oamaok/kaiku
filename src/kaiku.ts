@@ -1471,14 +1471,14 @@ function jsx(
   props: DefaultProps | HtmlElementProperties | null,
   key?: string
 ): NodeDescriptor<any> {
-  const propsCopy: Record<string, any> = {
-    ...props,
-    key,
-  }
-  let children = propsCopy.children
+  let children = props?.children
   children = children !== undefined ?
     (Array.isArray(children) ? children : [children]) : undefined
-  propsCopy.children = children
+  const propsCopy: Record<string, any> = {
+    ...props,
+    children,
+    key,
+  }
 
   if (typeof type === 'string') {
     delete propsCopy.children
