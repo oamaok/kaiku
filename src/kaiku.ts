@@ -1162,18 +1162,6 @@ const updateHtmlElementInstance = (
           }
           continue
         }
-        case 'disabled':
-        case 'selected':
-        case 'checked': {
-          lazy(instance, nextProps[key], (value) => {
-            if (!Boolean(value)) {
-              instance.element_.removeAttribute(key)
-            } else {
-              instance.element_.setAttribute(key, value)
-            }
-          })
-          continue
-        }
         case 'value': {
           lazy(instance, nextProps[key] ?? '', (value) => {
             ;(instance.element_ as HTMLInputElement).value = value
@@ -1191,13 +1179,21 @@ const updateHtmlElementInstance = (
       }
 
       if (key in nextProps) {
-        lazy(instance, nextProps[key] as LazyProperty<string>, (value) => {
-          if (typeof value === 'undefined') {
-            instance.element_.removeAttribute(key)
-          } else {
-            instance.element_.setAttribute(key, value)
+        lazy(
+          instance,
+          nextProps[key] as LazyProperty<string | undefined | false | null>,
+          (value) => {
+            if (
+              typeof value === 'undefined' ||
+              value === false ||
+              value === null
+            ) {
+              instance.element_.removeAttribute(key)
+            } else {
+              instance.element_.setAttribute(key, value)
+            }
           }
-        })
+        )
       } else {
         instance.element_.removeAttribute(key)
       }
@@ -1472,8 +1468,12 @@ function jsx(
   key?: string
 ): NodeDescriptor<any> {
   let children = props?.children
-  children = children !== undefined ?
-    (Array.isArray(children) ? children : [children]) : undefined
+  children =
+    children !== undefined
+      ? Array.isArray(children)
+        ? children
+        : [children]
+      : undefined
   const propsCopy: Record<string, any> = {
     ...props,
     children,
