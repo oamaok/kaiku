@@ -17,9 +17,11 @@
     "jsx-runtime.js"
   ],
   "scripts": {
-    "test": "yarn build && yarn test:dev && yarn test:minified",
+    "test": "yarn build && yarn test:dev && yarn test:minified && yarn test:jsx:dev && yarn test:jsx:minified",
     "test:minified": "cross-env KAIKU_VERSION=minified jest --coverage",
     "test:dev": "cross-env KAIKU_VERSION=development jest --coverage",
+    "test:jsx:minified": "cross-env KAIKU_JSX_RUNTIME=true KAIKU_VERSION=minified jest --coverage",
+    "test:jsx:dev": "cross-env KAIKU_JSX_RUNTIME=true KAIKU_VERSION=development jest --coverage",
     "typings": "tsc --project tsconfig.json",
     "build": "rm -rf dist/ && node build.js",
     "lint": "eslint src/*",
@@ -33,6 +35,7 @@
     "@babel/preset-env": "^7.14.7",
     "@typescript-eslint/eslint-plugin": "^4.28.3",
     "@typescript-eslint/parser": "^4.28.3",
+    "babel-plugin-transform-define": "^2.1.2",
     "cross-env": "^7.0.3",
     "esbuild": "^0.12.15",
     "eslint": "^7.30.0",

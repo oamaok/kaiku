@@ -1446,6 +1446,61 @@ function h(
   })
 }
 
+function jsx(
+  type: HtmlElementTagName,
+  props: HtmlElementProperties,
+  key?: string
+): HtmlElementDescriptor
+function jsx<PropertiesT extends DefaultProps>(
+  type: FunctionComponent<PropertiesT>,
+  props: PropertiesT | null,
+  key?: string
+): FunctionComponentDescriptor<PropertiesT>
+function jsx<PropertiesT extends DefaultProps>(
+  type: ClassComponent<PropertiesT>,
+  props: PropertiesT | null,
+  key?: string
+): ClassComponentDescriptor<PropertiesT>
+function jsx(
+  type: typeof Fragment,
+  props: null | { key?: string | number },
+  key?: string
+): FragmentDescriptor
+function jsx(
+  type: any,
+  props: DefaultProps | HtmlElementProperties | null,
+  key?: string
+): NodeDescriptor<any> {
+  let children = props?.children
+  children = children !== undefined ?
+    (Array.isArray(children) ? children : [children]) : undefined
+  const propsCopy: Record<string, any> = {
+    ...props,
+    children,
+    key,
+  }
+
+  if (typeof type === 'string') {
+    delete propsCopy.children
+    return createHtmlElementDescriptor(
+      type as HtmlElementTagName,
+      propsCopy,
+      children ?? []
+    )
+  }
+
+  if (type[CLASS_COMPONENT_FLAG] as boolean) {
+    return createClassComponentDescriptor(type, propsCopy)
+  }
+
+  if (type === Fragment) {
+    delete propsCopy.children
+    return createFragmentDescriptor(propsCopy, children ?? [])
+  }
+
+  return createFunctionComponentDescriptor(type, propsCopy)
+}
+
 const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
   element: HTMLElement
@@ -1475,6 +1530,7 @@ export {
   Component,
   Fragment,
   h,
+  jsx,
   render,
   useState,
   useRef,
