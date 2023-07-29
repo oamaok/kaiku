@@ -1168,6 +1168,12 @@ const updateHtmlElementInstance = (
           })
           continue
         }
+        case 'checked': {
+          lazy(instance, nextProps[key] ?? '', (value) => {
+            ;(instance.element_ as HTMLInputElement).checked = Boolean(value)
+          })
+          continue
+        }
         case 'className': {
           lazy(instance, nextProps[key], (value) => {
             ;(instance.element_.className as any) = stringifyClassNames(
