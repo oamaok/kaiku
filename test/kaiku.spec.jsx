@@ -1326,4 +1326,49 @@ describe('kaiku', () => {
     await nextTick()
     expect(inputElem.value).toBe('foobar')
   })
+
+  it('should not run effects of unmounted components', async () => {
+    const effectCounter = jest.fn()
+    const unsubCounter = jest.fn()
+    const state = createState({
+      isCompMounted: true,
+      counter: 0,
+    })
+
+    const Comp = () => {
+      useEffect(() => {
+        effectCounter(state.counter)
+        return unsubCounter
+      })
+      
+      return <div />
+    }
+
+    const App = () => {
+      return (
+        <div>
+          {state.isCompMounted ? <Comp /> : null}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(effectCounter).toHaveBeenCalledTimes(1)
+    expect(unsubCounter).toHaveBeenCalledTimes(0)
+
+    state.counter++
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(2)
+    expect(unsubCounter).toHaveBeenCalledTimes(1)
+
+    state.isCompMounted = false
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(2)
+    expect(unsubCounter).toHaveBeenCalledTimes(2)
+
+    state.counter++
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(2)
+    expect(unsubCounter).toHaveBeenCalledTimes(2)
+  })
 })

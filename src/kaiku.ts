@@ -330,11 +330,9 @@ const deferredUpdate = () => {
 
       updatedDependees.add(dependeeId)
 
-      // FIXME: Technically this check shouldn't be needed, right?
       const dependee = currentDependees.get(dependeeId)
-      if (dependee) {
-        updateDependee(dependee)
-      }
+      assert?.(dependee)
+      updateDependee(dependee)
     }
   }
 
@@ -403,6 +401,12 @@ const trackedExecute = <F extends (...args: any[]) => any>(
 
 const removeDependencies = (dependee: Dependee) => {
   currentDependees.delete(dependee.id_)
+  let keys = dependeeToKeys.get(dependee.id_)
+  if (keys) {
+    for (const key of keys) {
+      keyToDependees.get(key)?.delete(dependee.id_)
+    }
+  }
   dependeeToKeys.delete(dependee.id_)
 }
 
@@ -434,7 +438,7 @@ const createState = <T extends object>(obj: T): State<T> => {
       const value = target[key as keyof T]
 
       if (!isArray && typeof value === 'function') {
-        return value.bind(target)
+        return (value as Function).bind(target)
       }
 
       return value
@@ -579,6 +583,7 @@ const destroyHooks = (componentId: DependeeId) => {
   const componentEffects = effects.get(componentId)
   if (componentEffects) {
     for (const effect of componentEffects) {
+      removeDependencies(effect)
       effect.unsubscribe_?.()
     }
   }
