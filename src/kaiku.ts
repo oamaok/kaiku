@@ -401,13 +401,14 @@ const trackedExecute = <F extends (...args: any[]) => any>(
 
 const removeDependencies = (dependee: Dependee) => {
   currentDependees.delete(dependee.id_)
-  let keys = dependeeToKeys.get(dependee.id_)
+  const keys = dependeeToKeys.get(dependee.id_)
   if (keys) {
     for (const key of keys) {
       keyToDependees.get(key)?.delete(dependee.id_)
     }
+
+    dependeeToKeys.delete(dependee.id_)
   }
-  dependeeToKeys.delete(dependee.id_)
 }
 
 const createState = <T extends object>(obj: T): State<T> => {
@@ -586,9 +587,9 @@ const destroyHooks = (componentId: DependeeId) => {
       removeDependencies(effect)
       effect.unsubscribe_?.()
     }
-  }
 
-  effects.delete(componentId)
+    effects.delete(componentId)
+  }
 }
 
 const runEffect = (effect: Effect) => {
