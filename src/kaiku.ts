@@ -51,11 +51,10 @@ type HtmlElementProperties = Record<string, any> & {
 }
 
 export type DefaultProps = Record<string, any>
-export type WithIntrinsicProps<T extends DefaultProps> = T extends {
-  children: any
+export type WithIntrinsicProps<T extends DefaultProps> = T & {
+  children?: Child | Children
+  key?: string
 }
-  ? T
-  : T & { children?: Child | Children }
 type LazyProperty<T> = T | (() => T)
 
 type ClassComponentDescriptor<
