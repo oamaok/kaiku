@@ -946,12 +946,18 @@ const updateFragmentInstance = (
   // DOM operations on them easier.
 
   instance.children_ = []
-  const nextkeys = new Set()
+  const nextkeys = new Set<string | number>()
 
   for (let i = childDescriptors.length - 1; i >= 0; i--) {
     const descriptor = childDescriptors[i]
     const descriptorKey = getKeyOfNodeDescriptor(descriptor)
     const key = descriptorKey === null ? i : descriptorKey
+
+    if (__DEBUG__) {
+      if (nextkeys.has(key)) {
+        throw new Error('Duplicate key detected! Make sure no two sibling elements have the same key.')
+      }
+    }
 
     nextkeys.add(key)
 
