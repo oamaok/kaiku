@@ -15,11 +15,10 @@ A lightweight JSX-based UI framework with a freely mutable, boilerplate-free glo
 Kaiku is packaged to be easily used in both browser and as a module, no build tools required:
 
 ```html
-<script src="https://unpkg.com/kaiku"></script>
-<script>
-  const { h, render, createState } = kaiku
-  const state = createState({ greeting: 'Hello world' })
+<script type="module">
+  import { h, render, createState } from 'https://unpkg.com/kaiku'
 
+  const state = createState({ greeting: 'Hello world' })
   const App = () => h('span', null, state.greeting)
 
   render(h(App), document.body)
