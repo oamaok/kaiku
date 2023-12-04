@@ -955,7 +955,9 @@ const updateFragmentInstance = (
 
     if (__DEBUG__) {
       if (nextkeys.has(key)) {
-        throw new Error('Duplicate key detected! Make sure no two sibling elements have the same key.')
+        throw new Error(
+          'Duplicate key detected! Make sure no two sibling elements have the same key.'
+        )
       }
     }
 
@@ -1376,6 +1378,10 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     }
 
     case HtmlElementTag: {
+      if (typeof instance.props.ref !== 'undefined') {
+        instance.props.ref.current = undefined
+      }
+
       destroyLazyUpdates(instance)
       assert?.(instance.parentElement_)
       instance.parentElement_.element_.removeChild(instance.element_)
