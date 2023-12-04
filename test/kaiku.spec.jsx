@@ -1371,4 +1371,35 @@ describe('kaiku', () => {
     expect(effectCounter).toHaveBeenCalledTimes(2)
     expect(unsubCounter).toHaveBeenCalledTimes(2)
   })
+
+  it('should set `ref.current` to `undefined` once HTML element unmounts', async () => {
+    const effectCounter = jest.fn()
+    const state = createState({ isDivMounted: false })
+
+    const App = () => {
+      const ref = useRef()
+
+      useEffect(() => {
+        effectCounter(ref.current)
+      })
+
+      return <div>
+        {state.isDivMounted ? <div ref={ref} id="el">foo</div> : null}
+      </div>
+    }
+
+    render(<App />, rootNode)
+    expect(effectCounter).toHaveBeenCalledTimes(1)
+    expect(effectCounter).toHaveBeenCalledWith(undefined)
+
+    state.isDivMounted = true
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(2)
+    expect(effectCounter).toHaveBeenCalledWith(rootNode.querySelector('#el'))
+
+    state.isDivMounted = false
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(3)
+    expect(effectCounter).toHaveBeenCalledWith(undefined)
+  })
 })

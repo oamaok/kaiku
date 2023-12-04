@@ -73,6 +73,7 @@ terser
           'useState',
           'useRef',
           'immutable',
+          'ref',
           'current',
           'Component',
           'componentDidMount',

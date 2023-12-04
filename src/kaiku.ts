@@ -1376,6 +1376,10 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     }
 
     case HtmlElementTag: {
+      if (typeof instance.props.ref !== 'undefined') {
+        instance.props.ref.current = undefined
+      }
+
       destroyLazyUpdates(instance)
       assert?.(instance.parentElement_)
       instance.parentElement_.element_.removeChild(instance.element_)
