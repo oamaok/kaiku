@@ -1089,7 +1089,7 @@ const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
       case 'className': {
         updateElementClassName(
           propUpdate.element_ as HTMLElement,
-          value as ClassNames
+          value as any
         )
         break
       }
