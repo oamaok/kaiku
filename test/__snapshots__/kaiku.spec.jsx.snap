@@ -86,6 +86,12 @@ exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<
 
 exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;
 
+exports[`kaiku should not refire previous lazy props if component re-renders 1`] = `"<div id=\\"0\\">0</div>"`;
+
+exports[`kaiku should not refire previous lazy props if component re-renders 2`] = `"<div id=\\"0\\">1</div>"`;
+
+exports[`kaiku should not refire previous lazy props if component re-renders 3`] = `"<div id=\\"1\\">1</div>"`;
+
 exports[`kaiku should remove an attribute if value is set to undefined 1`] = `"<div id=\\"foo\\"></div>"`;
 
 exports[`kaiku should remove an attribute if value is set to undefined 2`] = `"<div></div>"`;

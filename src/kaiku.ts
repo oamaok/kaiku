@@ -142,7 +142,8 @@ type HtmlElementInstance = {
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   children_: FragmentInstance | null
-  lazyUpdates: (LazyPropUpdate<any> | LazyStyleUpdate<any>)[]
+  lazyPropUpdates: Map<string, LazyPropUpdate<any>> | null
+  lazyStyleUpdates: Map<string, LazyStyleUpdate<any>> | null
 }
 
 type TextInstance = {
@@ -1048,7 +1049,7 @@ const updateElementProperty = (
       break
     }
     default: {
-      if (typeof value === 'undefined' || value === false || value === null) {
+      if (!Boolean(value) && value !== 0) {
         element.removeAttribute(property)
       } else {
         element.setAttribute(property, value)
@@ -1072,16 +1073,27 @@ const registerLazyPropUpdate = <T>(
   property: string,
   callback: () => T
 ) => {
-  const propUpdate: LazyPropUpdate<T> = {
-    id_: ++nextDependeeId as DependeeId,
-    tag_: LazyPropUpdateTag,
-    element_: instance.element_,
-    property,
-    callback,
-    previousValue: undefined,
+  if (!instance.lazyPropUpdates) {
+    instance.lazyPropUpdates = new Map()
   }
 
-  instance.lazyUpdates.push(propUpdate)
+  let propUpdate: LazyPropUpdate<T> | undefined =
+    instance.lazyPropUpdates.get(property)
+
+  if (propUpdate) {
+    propUpdate.callback = callback
+  } else {
+    propUpdate = {
+      id_: ++nextDependeeId as DependeeId,
+      tag_: LazyPropUpdateTag,
+      element_: instance.element_,
+      property,
+      callback,
+      previousValue: undefined,
+    }
+    instance.lazyPropUpdates.set(property, propUpdate)
+  }
+
   runLazyPropUpdate(propUpdate)
 }
 
@@ -1099,16 +1111,28 @@ const registerLazyStyleUpdate = <T>(
   property: string,
   callback: () => T
 ) => {
-  const styleUpdate: LazyStyleUpdate<T> = {
-    id_: ++nextDependeeId as DependeeId,
-    tag_: LazyStyleUpdateTag,
-    element_: instance.element_ as HTMLElement,
-    property,
-    callback,
-    previousValue: undefined,
+  if (!instance.lazyStyleUpdates) {
+    instance.lazyStyleUpdates = new Map()
   }
 
-  instance.lazyUpdates.push(styleUpdate)
+  let styleUpdate: LazyStyleUpdate<T> | undefined =
+    instance.lazyStyleUpdates.get(property)
+
+  if (styleUpdate) {
+    styleUpdate.callback = callback
+  } else {
+    styleUpdate = {
+      id_: ++nextDependeeId as DependeeId,
+      tag_: LazyStyleUpdateTag,
+      element_: instance.element_ as HTMLElement,
+      property,
+      callback,
+      previousValue: undefined,
+    }
+
+    instance.lazyStyleUpdates.set(property, styleUpdate)
+  }
+
   runLazyStyleUpdate(styleUpdate)
 }
 
@@ -1122,8 +1146,17 @@ const runLazyStyleUpdate = <T>(styleUpdate: LazyStyleUpdate<T>) => {
 }
 
 const destroyLazyUpdates = (instance: HtmlElementInstance) => {
-  for (let lazyUpdate; (lazyUpdate = instance.lazyUpdates.pop()); ) {
-    removeDependencies(lazyUpdate)
+  if (instance.lazyPropUpdates) {
+    for (const [, propUpdate] of instance.lazyPropUpdates) {
+      removeDependencies(propUpdate)
+    }
+    instance.lazyPropUpdates = null
+  }
+  if (instance.lazyStyleUpdates) {
+    for (const [, styleUpdate] of instance.lazyStyleUpdates) {
+      removeDependencies(styleUpdate)
+    }
+    instance.lazyStyleUpdates = null
   }
 }
 
@@ -1192,7 +1225,8 @@ const createHtmlElementInstance = (
     nextSibling_: null,
     props_: EMPTY_OBJECT,
     children_: null,
-    lazyUpdates: [],
+    lazyPropUpdates: null,
+    lazyStyleUpdates: null,
   }
 
   updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
@@ -1589,7 +1623,8 @@ const render: Render = <PropertiesT extends DefaultProps>(
     parentElement_: null,
     nextSibling_: null,
     props_: EMPTY_OBJECT,
-    lazyUpdates: [],
+    lazyPropUpdates: null,
+    lazyStyleUpdates: null,
   }
 
   const rootComponentInstance = createNodeInstance(descriptor, {

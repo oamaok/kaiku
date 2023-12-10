@@ -603,6 +603,47 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should not refire previous lazy props if component re-renders', async () => {
+    const lazyCallCounter = jest.fn()
+    const componentRenderCounter = jest.fn()
+
+    const state = createState({ a: 0, b: 0 })
+
+    const App = () => {
+      componentRenderCounter()
+
+      return (
+        <div
+          id={() => {
+            lazyCallCounter()
+            return state.b
+          }}
+        >
+          {state.a}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(lazyCallCounter).toHaveBeenCalledTimes(1)
+
+    state.a++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(2)
+    expect(lazyCallCounter).toHaveBeenCalledTimes(2)
+
+    state.b++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(2)
+    // If this changes to 4, the previous instance of the lazy property update
+    // was somehow incorrectly called.
+    expect(lazyCallCounter).toHaveBeenCalledTimes(3)
+  })
+
   it.skip('should not exhaust call stack with MANY nested elements', async () => {
     const state = createState({ amount: 10000 })
 
