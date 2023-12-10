@@ -1023,27 +1023,38 @@ const createTextInstance = (descriptor: TextDescriptor): TextInstance => {
 //
 ///////////////
 
-// TODO: This should probably be inlined somehow, but esbuild does not preserve comments
-// to be passed down to Terser, so /*@__INLINE__*/ comments don't work.
-const updateElementClassName = (element: HTMLElement, value: ClassNames) => {
-  element.className = stringifyClassNames(value ?? '')
-}
-
-// TODO: Should be inlined. See above.
-const updateElementValue = (element: HTMLElement | SVGElement, value: any) => {
-  ;(element as HTMLInputElement).value = value
-}
-
-// TODO: Should be inlined. See above.
 const updateElementProperty = (
   element: HTMLElement | SVGElement,
   property: string,
   value: any
 ) => {
-  if (typeof value === 'undefined' || value === false || value === null) {
-    element.removeAttribute(property)
-  } else {
-    element.setAttribute(property, value)
+  switch (property) {
+    case 'value': {
+      ;(element as HTMLInputElement).value = value
+      break
+    }
+    case 'checked': {
+      if (Boolean(value)) {
+        element.setAttribute(property, value)
+      } else {
+        element.removeAttribute(property)
+      }
+      ;(element as HTMLInputElement).checked = Boolean(value)
+      break
+    }
+    case 'class':
+    case 'className': {
+      ;(element as HTMLElement).className = stringifyClassNames(value ?? '')
+      break
+    }
+    default: {
+      if (typeof value === 'undefined' || value === false || value === null) {
+        element.removeAttribute(property)
+      } else {
+        element.setAttribute(property, value)
+      }
+      break
+    }
   }
 }
 
@@ -1079,22 +1090,7 @@ const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
 
   if (value !== propUpdate.previousValue) {
     propUpdate.previousValue = value
-
-    switch (propUpdate.property) {
-      case 'value': {
-        updateElementValue(propUpdate.element_, value)
-        break
-      }
-      case 'class':
-      case 'className': {
-        updateElementClassName(propUpdate.element_ as HTMLElement, value as any)
-        break
-      }
-      default: {
-        updateElementProperty(propUpdate.element_, propUpdate.property, value)
-        break
-      }
-    }
+    updateElementProperty(propUpdate.element_, propUpdate.property, value)
   }
 }
 
@@ -1265,39 +1261,10 @@ const updateHtmlElementInstance = (
         )
       }
     } else {
-      switch (key) {
-        case 'value': {
-          if (typeof nextProps[key] === 'function') {
-            registerLazyPropUpdate(instance, key, nextProps[key])
-          } else {
-            updateElementValue(instance.element_ as HTMLElement, nextProps[key])
-          }
-          break
-        }
-        case 'class':
-        case 'className': {
-          if (typeof nextProps[key] === 'function') {
-            registerLazyPropUpdate(instance, key, nextProps[key])
-          } else {
-            updateElementClassName(
-              instance.element_ as HTMLElement,
-              nextProps[key]
-            )
-          }
-          break
-        }
-        default: {
-          if (key in nextProps) {
-            if (typeof nextProps[key] === 'function') {
-              registerLazyPropUpdate(instance, key, nextProps[key])
-            } else {
-              updateElementProperty(instance.element_, key, nextProps[key])
-            }
-          } else {
-            instance.element_.removeAttribute(key)
-          }
-          break
-        }
+      if (typeof nextProps[key] === 'function') {
+        registerLazyPropUpdate(instance, key, nextProps[key])
+      } else {
+        updateElementProperty(instance.element_, key, nextProps[key])
       }
     }
   }
