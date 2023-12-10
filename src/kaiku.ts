@@ -26,7 +26,8 @@ declare const HtmlElementTag = 'HtmlElement'
 declare const FragmentTag = 'Fragment'
 declare const TextNodeTag = 'TextNode'
 declare const EffectTag = 'EffectTag'
-declare const LazyUpdateTag = 'LazyUpdateTag'
+declare const LazyPropUpdateTag = 'LazyPropUpdateTag'
+declare const LazyStyleUpdateTag = 'LazyStyleUpdateTag'
 
 const CLASS_COMPONENT_FLAG = Symbol()
 const IMMUTABLE_FLAG = Symbol()
@@ -46,7 +47,7 @@ type HtmlElementTagName =
   | keyof HTMLElementTagNameMap
   | keyof SVGElementTagNameMap
 type HtmlElementProperties = Record<string, any> & {
-  style?: Record<string, string>
+  style?: Record<string, string | (() => string)>
   className?: ClassNames
 }
 
@@ -55,7 +56,6 @@ export type WithIntrinsicProps<T extends DefaultProps> = T & {
   children?: Child | Children
   key?: string
 }
-type LazyProperty<T> = T | (() => T)
 
 type ClassComponentDescriptor<
   PropertiesT extends DefaultProps,
@@ -142,7 +142,7 @@ type HtmlElementInstance = {
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   children_: FragmentInstance | null
-  lazyUpdates: LazyUpdate<any>[]
+  lazyUpdates: (LazyPropUpdate<any> | LazyStyleUpdate<any>)[]
 }
 
 type TextInstance = {
@@ -216,12 +216,22 @@ type Effect = {
   unsubscribe_?: () => void
 }
 
-type LazyUpdate<T> = {
+type LazyPropUpdate<T> = {
   id_: DependeeId
-  tag_: typeof LazyUpdateTag
-  prop: () => T
-  handler: (value: T) => void
-  lastValue: T | undefined
+  tag_: typeof LazyPropUpdateTag
+  element_: HTMLElement | SVGElement
+  property: string
+  callback: () => T
+  previousValue: T | undefined
+}
+
+type LazyStyleUpdate<T> = {
+  id_: DependeeId
+  tag_: typeof LazyStyleUpdateTag
+  element_: HTMLElement
+  property: string
+  callback: () => T
+  previousValue: T | undefined
 }
 
 type Ref<T> = {
@@ -232,7 +242,8 @@ type Dependee =
   | ClassComponentInstance<any, any>
   | FunctionComponentInstance<any>
   | Effect
-  | LazyUpdate<any>
+  | LazyPropUpdate<any>
+  | LazyStyleUpdate<any>
 
 type Render = <PropertiesT extends DefaultProps, StateT extends {}>(
   rootDescriptor: NodeDescriptor<PropertiesT>,
@@ -293,8 +304,12 @@ const updateDependee = (dependee: Dependee) => {
       runEffect(dependee)
       break
     }
-    case LazyUpdateTag: {
-      runLazyUpdate(dependee)
+    case LazyPropUpdateTag: {
+      runLazyPropUpdate(dependee)
+      break
+    }
+    case LazyStyleUpdateTag: {
+      runLazyStyleUpdate(dependee)
       break
     }
   }
@@ -1008,37 +1023,109 @@ const createTextInstance = (descriptor: TextDescriptor): TextInstance => {
 //
 ///////////////
 
-const runLazyUpdate = <T>(lazyUpdate: LazyUpdate<T>) => {
-  const { prop, handler, lastValue } = lazyUpdate
+// TODO: This should probably be inlined somehow, but esbuild does not preserve comments
+// to be passed down to Terser, so /*@__INLINE__*/ comments don't work.
+const updateElementClassName = (element: HTMLElement, value: ClassNames) => {
+  element.className = stringifyClassNames(value ?? '')
+}
 
-  const value = trackedExecute(lazyUpdate, prop)
-  if (value !== lastValue) {
-    lazyUpdate.lastValue = value
-    handler(value)
+// TODO: Should be inlined. See above.
+const updateElementValue = (element: HTMLElement | SVGElement, value: any) => {
+  ;(element as HTMLInputElement).value = value
+}
+
+// TODO: Should be inlined. See above.
+const updateElementProperty = (
+  element: HTMLElement | SVGElement,
+  property: string,
+  value: any
+) => {
+  if (typeof value === 'undefined' || value === false || value === null) {
+    element.removeAttribute(property)
+  } else {
+    element.setAttribute(property, value)
   }
 }
 
-const lazy = <T>(
-  instance: HtmlElementInstance,
-  prop: LazyProperty<T>,
-  handler: (value: T) => void
+// TODO: Should be inlined. See above.
+const updateElementStyle = (
+  element: HTMLElement | SVGElement,
+  property: string,
+  value: any
 ) => {
-  if (typeof prop !== 'function') {
-    handler(prop)
-    return
-  }
+  element.style[property as any] = value
+}
 
-  const lazyUpdate: LazyUpdate<T> = {
+const registerLazyPropUpdate = <T>(
+  instance: HtmlElementInstance,
+  property: string,
+  callback: () => T
+) => {
+  const propUpdate: LazyPropUpdate<T> = {
     id_: ++nextDependeeId as DependeeId,
-    tag_: LazyUpdateTag,
-    lastValue: undefined,
-    prop: prop as () => T,
-    handler,
+    tag_: LazyPropUpdateTag,
+    element_: instance.element_,
+    property,
+    callback,
+    previousValue: undefined,
   }
 
-  runLazyUpdate(lazyUpdate)
+  instance.lazyUpdates.push(propUpdate)
+  runLazyPropUpdate(propUpdate)
+}
 
-  instance.lazyUpdates.push(lazyUpdate)
+const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
+  const value = trackedExecute(propUpdate, propUpdate.callback)
+
+  if (value !== propUpdate.previousValue) {
+    propUpdate.previousValue = value
+
+    switch (propUpdate.property) {
+      case 'value': {
+        updateElementValue(propUpdate.element_, value)
+        break
+      }
+      case 'class':
+      case 'className': {
+        updateElementClassName(
+          propUpdate.element_ as HTMLElement,
+          value as ClassNames
+        )
+        break
+      }
+      default: {
+        updateElementProperty(propUpdate.element_, propUpdate.property, value)
+        break
+      }
+    }
+  }
+}
+
+const registerLazyStyleUpdate = <T>(
+  instance: HtmlElementInstance,
+  property: string,
+  callback: () => T
+) => {
+  const styleUpdate: LazyStyleUpdate<T> = {
+    id_: ++nextDependeeId as DependeeId,
+    tag_: LazyStyleUpdateTag,
+    element_: instance.element_ as HTMLElement,
+    property,
+    callback,
+    previousValue: undefined,
+  }
+
+  instance.lazyUpdates.push(styleUpdate)
+  runLazyStyleUpdate(styleUpdate)
+}
+
+const runLazyStyleUpdate = <T>(styleUpdate: LazyStyleUpdate<T>) => {
+  const value = trackedExecute(styleUpdate, styleUpdate.callback)
+
+  if (value !== styleUpdate.previousValue) {
+    styleUpdate.previousValue = value
+    updateElementStyle(styleUpdate.element_, styleUpdate.property, value)
+  }
 }
 
 const destroyLazyUpdates = (instance: HtmlElementInstance) => {
@@ -1127,8 +1214,32 @@ const updateHtmlElementInstance = (
 ) => {
   const keys = unionOfKeys(nextProps, instance.props)
 
+  // Handle the style prop
+  const properties = unionOfKeys(
+    nextProps.style ||
+      (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>),
+    instance.props.style ||
+      (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>)
+  )
+
+  for (const property of properties) {
+    const prevValue = instance.props.style?.[property]
+    const value = nextProps.style?.[property]
+
+    if (prevValue !== value) {
+      if (typeof value === 'function') {
+        registerLazyStyleUpdate(instance, property, value)
+      } else {
+        updateElementStyle(instance.element_, property, value)
+      }
+    }
+  }
+
+  // Handle properties other than `style`
   for (const key of keys) {
-    // TODO: Special case access to style and classsnames
+    if (key === 'style') continue
+
+    // TODO: Special case access to classsnames
     if (instance.props[key] === nextProps[key]) continue
     if (key === 'key') continue
 
@@ -1158,57 +1269,38 @@ const updateHtmlElementInstance = (
       }
     } else {
       switch (key) {
-        case 'style': {
-          const properties = unionOfKeys(
-            nextProps.style || EMPTY_OBJECT,
-            instance.props.style || EMPTY_OBJECT
-          )
-
-          for (const property of properties) {
-            if (
-              nextProps.style?.[property] !== instance.props.style?.[property]
-            ) {
-              lazy(instance, nextProps.style?.[property] ?? '', (value) => {
-                instance.element_.style[property as any] = value
-              })
-            }
-          }
-          continue
-        }
         case 'value': {
-          lazy(instance, nextProps[key] ?? '', (value) => {
-            ;(instance.element_ as HTMLInputElement).value = value
-          })
-          continue
-        }
-        case 'className': {
-          lazy(instance, nextProps[key], (value) => {
-            ;(instance.element_.className as any) = stringifyClassNames(
-              value ?? ''
-            )
-          })
-          continue
-        }
-      }
-
-      if (key in nextProps) {
-        lazy(
-          instance,
-          nextProps[key] as LazyProperty<string | undefined | false | null>,
-          (value) => {
-            if (
-              typeof value === 'undefined' ||
-              value === false ||
-              value === null
-            ) {
-              instance.element_.removeAttribute(key)
-            } else {
-              instance.element_.setAttribute(key, value)
-            }
+          if (typeof nextProps[key] === 'function') {
+            registerLazyPropUpdate(instance, key, nextProps[key])
+          } else {
+            updateElementValue(instance.element_ as HTMLElement, nextProps[key])
           }
-        )
-      } else {
-        instance.element_.removeAttribute(key)
+          break
+        }
+        case 'class':
+        case 'className': {
+          if (typeof nextProps[key] === 'function') {
+            registerLazyPropUpdate(instance, key, nextProps[key])
+          } else {
+            updateElementClassName(
+              instance.element_ as HTMLElement,
+              nextProps[key]
+            )
+          }
+          break
+        }
+        default: {
+          if (key in nextProps) {
+            if (typeof nextProps[key] === 'function') {
+              registerLazyPropUpdate(instance, key, nextProps[key])
+            } else {
+              updateElementProperty(instance.element_, key, nextProps[key])
+            }
+          } else {
+            instance.element_.removeAttribute(key)
+          }
+          break
+        }
       }
     }
   }

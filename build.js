@@ -22,7 +22,8 @@ fs.writeFileSync(
       FragmentTag: '"Fragment"',
       TextNodeTag: '"TextNode"',
       EffectTag: '"EffectTag"',
-      LazyUpdateTag: '"LazyUpdateTag"',
+      LazyPropUpdateTag: '"LazyPropUpdateTag"',
+      LazyStyleUpdateTag: '"LazyStyleUpdateTag"',
     },
   }).code
 )
@@ -44,7 +45,8 @@ fs.writeFileSync(
       FragmentTag: tagId++,
       TextNodeTag: tagId++,
       EffectTag: tagId++,
-      LazyUpdateTag: tagId++,
+      LazyPropUpdateTag: tagId++,
+      LazyStyleUpdateTag: tagId++,
     },
   }).code
 )
@@ -80,7 +82,6 @@ terser
           'componentWillUnmount',
           'Fragment',
           'state',
-          'props',
         ],
       },
     },
