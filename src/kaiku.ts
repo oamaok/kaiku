@@ -1245,7 +1245,7 @@ const updateHtmlElementInstance = (
     const isListener = key[0] === 'o' && key[1] === 'n'
 
     if (isListener) {
-      const eventName = key.substr(2).toLowerCase()
+      const eventName = key.substring(2).toLowerCase()
 
       if (key in instance.props_) {
         instance.element_.removeEventListener(
