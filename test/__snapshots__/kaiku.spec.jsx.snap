@@ -1,5 +1,7 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`kaiku should be able to access this.props 1`] = `"<div>hello</div>"`;
+
 exports[`kaiku should handle changing rootNode.firstChild 1`] = `"<div>Hello, I am a div tag!</div>"`;
 
 exports[`kaiku should handle changing rootNode.firstChild 2`] = `"<span>Hello, I am a span tag!</span>"`;

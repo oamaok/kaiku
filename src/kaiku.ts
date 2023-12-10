@@ -63,18 +63,18 @@ type ClassComponentDescriptor<
 > = {
   tag_: typeof ClassComponentTag
   class_: ClassComponent<PropertiesT, StateT>
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
 }
 
 type FunctionComponentDescriptor<PropertiesT extends DefaultProps> = {
   tag_: typeof FunctionComponentTag
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
   func: FunctionComponent<PropertiesT>
 }
 
 type FragmentDescriptor = {
   tag_: typeof FragmentTag
-  props: FragmentProperties
+  props_: FragmentProperties
   children_: Child[]
 }
 
@@ -82,7 +82,7 @@ type HtmlElementDescriptor = {
   tag_: typeof HtmlElementTag
   existingElement?: HTMLElement
   tagName_: HtmlElementTagName
-  props: HtmlElementProperties
+  props_: HtmlElementProperties
   children_: Child[]
 }
 
@@ -106,7 +106,7 @@ type ClassComponentInstance<
   tag_: typeof ClassComponentTag
   context_: Context
   instance: Component<PropertiesT, StateT>
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
   child: NodeInstance<any> | null
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
@@ -117,7 +117,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   tag_: typeof FunctionComponentTag
   func: FunctionComponent<PropertiesT>
   context_: Context
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   child: NodeInstance<any> | null
@@ -126,7 +126,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
 type FragmentInstance = {
   tag_: typeof FragmentTag
   context_: Context
-  props: FragmentProperties
+  props_: FragmentProperties
   children_: NodeInstance<DefaultProps>[]
   childMap: Map<string | number, NodeInstance<DefaultProps>>
   parentElement_: HtmlElementInstance | null
@@ -137,7 +137,7 @@ type HtmlElementInstance = {
   tag_: typeof HtmlElementTag
   tagName_: HtmlElementTagName
   element_: HTMLElement | SVGElement
-  props: HtmlElementProperties
+  props_: HtmlElementProperties
   context_: Context
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
@@ -719,7 +719,7 @@ const reuseNodeInstance = (
     descriptor.tag_ === ClassComponentTag &&
     instance.instance instanceof descriptor.class_
   ) {
-    updateComponentInstance(instance, descriptor.props)
+    updateComponentInstance(instance, descriptor.props_)
     return true
   }
 
@@ -728,7 +728,7 @@ const reuseNodeInstance = (
     descriptor.tag_ === FunctionComponentTag &&
     instance.func === descriptor.func
   ) {
-    updateComponentInstance(instance, descriptor.props)
+    updateComponentInstance(instance, descriptor.props_)
     return true
   }
 
@@ -737,7 +737,7 @@ const reuseNodeInstance = (
     descriptor.tag_ === HtmlElementTag &&
     instance.tagName_ === descriptor.tagName_
   ) {
-    updateHtmlElementInstance(instance, descriptor.props, descriptor.children_)
+    updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
     return true
   }
 
@@ -763,8 +763,8 @@ const getKeyOfNodeDescriptor = (
     return null
   }
 
-  if (typeof descriptor.props?.key !== 'undefined') {
-    return descriptor.props?.key
+  if (typeof descriptor.props_?.key !== 'undefined') {
+    return descriptor.props_?.key
   }
 
   return null
@@ -777,11 +777,11 @@ const getKeyOfNodeDescriptor = (
 
 const createClassComponentDescriptor = <PropertiesT extends DefaultProps>(
   class_: ClassComponent<PropertiesT>,
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
 ): ClassComponentDescriptor<PropertiesT> => ({
   tag_: ClassComponentTag,
   class_,
-  props,
+  props_,
 })
 
 const createClassComponentInstance = <
@@ -794,7 +794,7 @@ const createClassComponentInstance = <
   const id = ++nextDependeeId as DependeeId
 
   startHookTracking(id)
-  const classInstance = new descriptor.class_(descriptor.props)
+  const classInstance = new descriptor.class_(descriptor.props_)
   stopHookTracking()
 
   classInstance.render = classInstance.render.bind(classInstance)
@@ -807,7 +807,7 @@ const createClassComponentInstance = <
     tag_: ClassComponentTag,
     context_: context,
     instance: classInstance,
-    props: descriptor.props,
+    props_: descriptor.props_,
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -825,11 +825,11 @@ const createClassComponentInstance = <
 
 const createFunctionComponentDescriptor = <PropertiesT extends DefaultProps>(
   func: FunctionComponent<PropertiesT>,
-  props: WithIntrinsicProps<PropertiesT>
+  props_: WithIntrinsicProps<PropertiesT>
 ): FunctionComponentDescriptor<PropertiesT> => ({
   tag_: FunctionComponentTag,
   func,
-  props,
+  props_,
 })
 
 const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
@@ -841,7 +841,7 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
     tag_: FunctionComponentTag,
     context_: context,
     func: descriptor.func,
-    props: descriptor.props,
+    props_: descriptor.props_,
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -859,14 +859,14 @@ const updateComponentInstance = <
   instance:
     | FunctionComponentInstance<PropertiesT>
     | ClassComponentInstance<PropertiesT, StateT>,
-  props: WithIntrinsicProps<PropertiesT> = instance.props
+  props: WithIntrinsicProps<PropertiesT> = instance.props_
 ) => {
-  if (props !== instance.props) {
-    const keys = unionOfKeys(props, instance.props)
+  if (props !== instance.props_) {
+    const keys = unionOfKeys(props, instance.props_)
     let equalProps = true
 
     for (const key of keys) {
-      if (props[key] !== instance.props[key]) {
+      if (props[key] !== instance.props_[key]) {
         equalProps = false
         break
       }
@@ -877,12 +877,12 @@ const updateComponentInstance = <
     }
   }
 
-  instance.props = props
+  instance.props_ = props
 
   let childDescriptor
   if (instance.tag_ === FunctionComponentTag) {
     startHookTracking(instance.id_)
-    childDescriptor = trackedExecute(instance, instance.func, instance.props)
+    childDescriptor = trackedExecute(instance, instance.func, instance.props_)
     stopHookTracking()
   } else {
     instance.instance.props = props
@@ -922,13 +922,13 @@ const updateComponentInstance = <
 const Fragment = Symbol()
 
 const createFragmentDescriptor = (
-  props: FragmentProperties,
+  props_: FragmentProperties,
   children: Child[]
 ): FragmentDescriptor => {
   return {
     tag_: FragmentTag,
     children_: children,
-    props,
+    props_,
   }
 }
 
@@ -938,7 +938,7 @@ const createFragmentInstance = (
 ): FragmentInstance => {
   const instance: FragmentInstance = {
     tag_: FragmentTag,
-    props: descriptor.props,
+    props_: descriptor.props_,
     context_,
     parentElement_: null,
     nextSibling_: null,
@@ -1087,10 +1087,7 @@ const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
       }
       case 'class':
       case 'className': {
-        updateElementClassName(
-          propUpdate.element_ as HTMLElement,
-          value as any
-        )
+        updateElementClassName(propUpdate.element_ as HTMLElement, value as any)
         break
       }
       default: {
@@ -1162,12 +1159,12 @@ const stringifyClassNames = (names: ClassNames): string => {
 
 const createHtmlElementDescriptor = (
   tagName_: HtmlElementTagName,
-  props: HtmlElementProperties,
+  props_: HtmlElementProperties,
   children_: Child[]
 ): HtmlElementDescriptor => ({
   tag_: HtmlElementTag,
   tagName_,
-  props,
+  props_,
   children_,
 })
 
@@ -1197,12 +1194,12 @@ const createHtmlElementInstance = (
     element_,
     parentElement_: null,
     nextSibling_: null,
-    props: EMPTY_OBJECT,
+    props_: EMPTY_OBJECT,
     children_: null,
     lazyUpdates: [],
   }
 
-  updateHtmlElementInstance(instance, descriptor.props, descriptor.children_)
+  updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
 
   return instance
 }
@@ -1212,18 +1209,18 @@ const updateHtmlElementInstance = (
   nextProps: HtmlElementProperties,
   children: Child[]
 ) => {
-  const keys = unionOfKeys(nextProps, instance.props)
+  const keys = unionOfKeys(nextProps, instance.props_)
 
   // Handle the style prop
   const properties = unionOfKeys(
     nextProps.style ||
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>),
-    instance.props.style ||
+    instance.props_.style ||
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>)
   )
 
   for (const property of properties) {
-    const prevValue = instance.props.style?.[property]
+    const prevValue = instance.props_.style?.[property]
     const value = nextProps.style?.[property]
 
     if (prevValue !== value) {
@@ -1240,7 +1237,7 @@ const updateHtmlElementInstance = (
     if (key === 'style') continue
 
     // TODO: Special case access to classsnames
-    if (instance.props[key] === nextProps[key]) continue
+    if (instance.props_[key] === nextProps[key]) continue
     if (key === 'key') continue
 
     if (key === 'ref') {
@@ -1254,10 +1251,10 @@ const updateHtmlElementInstance = (
     if (isListener) {
       const eventName = key.substr(2).toLowerCase()
 
-      if (key in instance.props) {
+      if (key in instance.props_) {
         instance.element_.removeEventListener(
           eventName as any,
-          instance.props[key] as any
+          instance.props_[key] as any
         )
       }
 
@@ -1305,7 +1302,7 @@ const updateHtmlElementInstance = (
     }
   }
 
-  instance.props = nextProps
+  instance.props_ = nextProps
 
   if (children.length === 0) {
     if (instance.children_) {
@@ -1470,8 +1467,8 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
     }
 
     case HtmlElementTag: {
-      if (typeof instance.props.ref !== 'undefined') {
-        instance.props.ref.current = undefined
+      if (typeof instance.props_.ref !== 'undefined') {
+        instance.props_.ref.current = undefined
       }
 
       destroyLazyUpdates(instance)
@@ -1624,7 +1621,7 @@ const render: Render = <PropertiesT extends DefaultProps>(
     },
     parentElement_: null,
     nextSibling_: null,
-    props: EMPTY_OBJECT,
+    props_: EMPTY_OBJECT,
     lazyUpdates: [],
   }
 

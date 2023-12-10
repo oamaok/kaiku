@@ -82,6 +82,7 @@ terser
           'componentWillUnmount',
           'Fragment',
           'state',
+          'props',
         ],
       },
     },

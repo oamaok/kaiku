@@ -950,6 +950,17 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should be able to access this.props', async () => {
+    class App extends Component {
+      render() {
+        return <div>{this.props.value}</div>
+      }
+    }
+
+    render(<App value="hello" />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should call componentDidMount only once', async () => {
     const state = createState({ ticker: 0 })
     const componentDidMountCall = jest.fn()
