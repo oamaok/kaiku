@@ -1,9 +1,9 @@
-const fs = require('fs')
-const esbuild = require('esbuild')
-const terser = require('terser')
+import fs from 'fs'
+import esbuild from 'esbuild'
+import * as terser from 'terser'
 
 fs.mkdirSync('dist')
-fs.copyFileSync('src/package-entry.js', 'dist/index.js')
+fs.copyFileSync('src/esmodule-entry.js', 'dist/index.js')
 
 const source = fs.readFileSync('./src/kaiku.ts').toString()
 
