@@ -82,10 +82,6 @@ exports[`kaiku should handle updates with Object.keys 5`] = `"<div><span>foobar<
 
 exports[`kaiku should handle updates with Object.keys 6`] = `"<div><span>foobar</span><span>barfoo</span></div>"`;
 
-exports[`kaiku should not exhaust call stack with MANY nested elements 1`] = `"<div>I am the final child!</div>"`;
-
-exports[`kaiku should not exhaust call stack with MANY nested elements 2`] = `"<div>I am the final child!</div>"`;
-
 exports[`kaiku should not refire previous lazy props if component re-renders 1`] = `"<div id=\\"0\\">0</div>"`;
 
 exports[`kaiku should not refire previous lazy props if component re-renders 2`] = `"<div id=\\"0\\">1</div>"`;

@@ -1,3 +1,5 @@
+import type * as kaiku from '../dist/kaiku.d.ts'
+
 const getKaiku = () => {
   switch (process.env.KAIKU_VERSION) {
     case 'minified':
@@ -16,9 +18,9 @@ const getStack = () => {
   try {
     throw new Error()
   } catch (err) {
-    return err.stack
+    return (err as any).stack
       .split('\n')
-      .map((v) => v.trim())
+      .map((v: string) => v.trim())
       .slice(2)
   }
 }
@@ -32,12 +34,21 @@ const {
   useState,
   useRef,
   Component,
-} = getKaiku()
+} = getKaiku() as {
+  h: typeof kaiku.h,
+  Fragment: typeof kaiku.Fragment,
+  Component: typeof kaiku.Component,
+  render: typeof kaiku.render,
+  createState: typeof kaiku.createState,
+  useEffect: typeof kaiku.useEffect,
+  useState: typeof kaiku.useState,
+  useRef: typeof kaiku.useRef,
+}
 
 const nextTick = () => new Promise(process.nextTick)
 
-let rootNode
-let secondRootNode
+let rootNode: HTMLDivElement
+let secondRootNode: HTMLDivElement
 beforeEach(() => {
   ;[rootNode, secondRootNode].forEach((node) => {
     if (node) document.body.removeChild(node)
@@ -90,13 +101,13 @@ describe('kaiku', () => {
     const displayElem = document.querySelector('#display')
     const buttonElem = document.querySelector('button')
 
-    expect(displayElem.innerHTML).toBe('The counter is at 0')
+    expect(displayElem!.innerHTML).toBe('The counter is at 0')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
-    buttonElem.click()
+    buttonElem!.click()
     await nextTick()
 
-    expect(displayElem.innerHTML).toBe('The counter is at 1')
+    expect(displayElem!.innerHTML).toBe('The counter is at 1')
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
@@ -116,19 +127,19 @@ describe('kaiku', () => {
     const displayElem = document.querySelector('span')
     const buttonElem = document.querySelector('button')
 
-    expect(displayElem.innerHTML).toBe('The counter is at 0')
+    expect(displayElem!.innerHTML).toBe('The counter is at 0')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
-    buttonElem.click()
+    buttonElem!.click()
     await nextTick()
 
-    expect(displayElem.innerHTML).toBe('The counter is at 1')
+    expect(displayElem!.innerHTML).toBe('The counter is at 1')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
-    buttonElem.click()
+    buttonElem!.click()
     await nextTick()
 
-    expect(displayElem.innerHTML).toBe('The counter is at 2')
+    expect(displayElem!.innerHTML).toBe('The counter is at 2')
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
@@ -158,14 +169,14 @@ describe('kaiku', () => {
 
     expect(propUpdateCounter).toHaveBeenCalledTimes(1)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
-    expect(element.getAttribute('name')).toBe('foo')
+    expect(element!.getAttribute('name')).toBe('foo')
 
     state.name = 'bar'
     await nextTick()
 
     expect(propUpdateCounter).toHaveBeenCalledTimes(2)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
-    expect(element.getAttribute('name')).toBe('bar')
+    expect(element!.getAttribute('name')).toBe('bar')
   })
 
   it('should support multiple render roots', async () => {
@@ -192,30 +203,30 @@ describe('kaiku', () => {
     const span1 = document.getElementById('test1')
     const span2 = document.getElementById('test2')
 
-    expect(span1.innerHTML).toBe('yes')
-    expect(span2.innerHTML).toBe('yes')
+    expect(span1!.innerHTML).toBe('yes')
+    expect(span2!.innerHTML).toBe('yes')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(1)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
 
     state.forFirst.foo = 'no'
     await nextTick()
-    expect(span1.innerHTML).toBe('no')
-    expect(span2.innerHTML).toBe('yes')
+    expect(span1!.innerHTML).toBe('no')
+    expect(span2!.innerHTML).toBe('yes')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
 
     state.forSecond.foo = 'maybe'
     await nextTick()
-    expect(span1.innerHTML).toBe('no')
-    expect(span2.innerHTML).toBe('maybe')
+    expect(span1!.innerHTML).toBe('no')
+    expect(span2!.innerHTML).toBe('maybe')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(2)
 
     state.forFirst = { foo: 'totally different' }
     state.forSecond = { foo: 'bruhaha' }
     await nextTick()
-    expect(span1.innerHTML).toBe('totally different')
-    expect(span2.innerHTML).toBe('bruhaha')
+    expect(span1!.innerHTML).toBe('totally different')
+    expect(span2!.innerHTML).toBe('bruhaha')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(3)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(3)
   })
@@ -387,7 +398,7 @@ describe('kaiku', () => {
 
     const state = createState({
       list: Array(10)
-        .fill()
+        .fill(null)
         .map((_, i) => ({
           key: i,
           name: 'Hello, I am item number ' + i,
@@ -395,7 +406,7 @@ describe('kaiku', () => {
         })),
     })
 
-    const Item = ({ item }) => {
+    const Item = ({ item, key }: { item: any, key: any }) => {
       itemRenderCounter(item)
       return <div>{item.name}</div>
     }
@@ -405,8 +416,8 @@ describe('kaiku', () => {
       return (
         <div>
           {state.list
-            .filter((item) => item.condition)
-            .map((item) => (
+            .filter((item: any) => item.condition)
+            .map((item: any) => (
               <Item key={item.key} item={item} />
             ))}
         </div>
@@ -466,7 +477,7 @@ describe('kaiku', () => {
 
     const state = createState({
       list: Array(10)
-        .fill()
+        .fill(null)
         .map((_, i) => ({
           key: i,
           name: 'Hello, I am item number ' + i,
@@ -474,7 +485,7 @@ describe('kaiku', () => {
         })),
     })
 
-    const Item = ({ item }) => {
+    const Item = ({ item }: { item: any, key: any }) => {
       itemRenderCounter(item)
       return <div>{item.name}</div>
     }
@@ -486,8 +497,8 @@ describe('kaiku', () => {
           {() => (
             <div>
               {state.list
-                .filter((item) => item.condition)
-                .map((item) => (
+                .filter((item: any) => item.condition)
+                .map((item: any) => (
                   <Item key={item.key} item={item} />
                 ))}
             </div>
@@ -543,7 +554,7 @@ describe('kaiku', () => {
 
     const state = createState({
       list: Array(10)
-        .fill()
+        .fill(null)
         .map((_, i) => ({
           key: i,
           borderThicc: 0,
@@ -551,7 +562,7 @@ describe('kaiku', () => {
         })),
     })
 
-    const Item = ({ item }) => {
+    const Item = ({ item }: any) => {
       itemRenderCounter(item)
       return (
         <div
@@ -570,8 +581,8 @@ describe('kaiku', () => {
       return (
         <div id="list">
           {state.list
-            .filter((item) => item.condition)
-            .map((item) => (
+            .filter((item: any) => item.condition)
+            .map((item: any) => (
               <Item key={item.key} item={item} />
             ))}
         </div>
@@ -647,7 +658,7 @@ describe('kaiku', () => {
   it.skip('should not exhaust call stack with MANY nested elements', async () => {
     const state = createState({ amount: 10000 })
 
-    const RecursiveComponent = ({ n }) => {
+    const RecursiveComponent = ({ n }: any) => {
       if (n === 0) {
         return <div>I am the final child!</div>
       }
@@ -680,11 +691,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element.className).toBe('always-here')
+    expect(element!.className).toBe('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element.className).toBe('always-here sometimes-here')
+    expect(element!.className).toBe('always-here sometimes-here')
   })
 
   it('should support lazy conditional classNames', async () => {
@@ -700,11 +711,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element.className).toBe('always-here')
+    expect(element!.className).toBe('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element.className).toBe('always-here sometimes-here')
+    expect(element!.className).toBe('always-here sometimes-here')
   })
 
   it('should support multiple conditional classNames', async () => {
@@ -724,11 +735,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element.className).toBe('always-here')
+    expect(element!.className).toBe('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element.className).toBe(
+    expect(element!.className).toBe(
       'always-here sometimes-here also-here you-didnt-expect-me-to-be-here'
     )
   })
@@ -783,7 +794,7 @@ describe('kaiku', () => {
     for (let i = 0; i < 50; i++) {
       state.a = !state.a
       await nextTick()
-      expect(document.querySelector('#app').innerHTML).toEqual(
+      expect(document.querySelector('#app')!.innerHTML).toEqual(
         state.a ? 'text' : '<b>bold text</b>'
       )
     }
@@ -916,8 +927,8 @@ describe('kaiku', () => {
     const state = createState({ value: 'second' })
 
     const App = () => {
-      const firstRef = useRef()
-      const secondRef = useRef()
+      const firstRef = useRef<HTMLDivElement>()
+      const secondRef = useRef<HTMLDivElement>()
 
       useEffect(() => {
         firstEffectCall(firstRef.current?.innerHTML)
@@ -967,7 +978,7 @@ describe('kaiku', () => {
   })
 
   it('should handle class components', async () => {
-    class App extends Component {
+    class App extends Component<{}, { counter: number }> {
       state = { counter: 0 }
 
       render() {
@@ -985,14 +996,14 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     const button = rootNode.querySelector('button')
-    button.click()
+    button!.click()
     await nextTick()
 
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
   it('should be able to access this.props', async () => {
-    class App extends Component {
+    class App extends Component<any, any> {
       render() {
         return <div>{this.props.value}</div>
       }
@@ -1007,7 +1018,7 @@ describe('kaiku', () => {
     const componentDidMountCall = jest.fn()
 
     class App extends Component {
-      ref = {}
+      ref: any = {}
 
       componentDidMount() {
         componentDidMountCall(this.ref.current.innerHTML)
@@ -1155,7 +1166,7 @@ describe('kaiku', () => {
 
   it('should handle updates with Object.keys', async () => {
     const state = createState({
-      obj: {},
+      obj: {} as Record<string, string>,
     })
 
     const App = () => {
@@ -1196,7 +1207,7 @@ describe('kaiku', () => {
 
   it('should not rerender a component depending on Object.keys unless the keys actually change', async () => {
     const state = createState({
-      obj: { a: undefined },
+      obj: { a: undefined as undefined | string  },
     })
 
     const reRenderCounter = jest.fn()
@@ -1287,7 +1298,7 @@ describe('kaiku', () => {
 
   it('should remove an attribute if value is set to undefined', async () => {
     const state = createState({
-      elemId: 'foo',
+      elemId: 'foo' as string | undefined,
     })
 
     const App = () => {
@@ -1362,7 +1373,7 @@ describe('kaiku', () => {
           <input
             type="text"
             value={state.inputValue}
-            onChange={(evt) => {
+            onChange={(evt: any) => {
               state.inputValue = evt.target.value
             }}
           />
@@ -1372,11 +1383,11 @@ describe('kaiku', () => {
 
     render(<App />, rootNode)
     const inputElem = document.querySelector('input')
-    expect(inputElem.value).toBe('')
+    expect(inputElem!.value).toBe('')
 
     state.inputValue = 'foobar'
     await nextTick()
-    expect(inputElem.value).toBe('foobar')
+    expect(inputElem!.value).toBe('foobar')
   })
 
   it('should not run effects of unmounted components', async () => {

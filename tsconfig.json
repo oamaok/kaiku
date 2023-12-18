@@ -7,7 +7,7 @@
     "downlevelIteration": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "lib": ["esnext", "dom"]
+    "lib": ["esnext", "dom"],
   },
-  "exclude": ["jsx-runtime.d.ts"]
+  "exclude": ["jsx-runtime.d.ts", "test/*"]
 }
