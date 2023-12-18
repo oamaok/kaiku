@@ -40,7 +40,7 @@ yarn add kaiku
 A simple ticker component with global state management.
 
 ```jsx
-import { h, render, createState } from 'kaiku'
+import { render, createState } from 'kaiku'
 
 const state = createState({ ticks: 0 })
 
