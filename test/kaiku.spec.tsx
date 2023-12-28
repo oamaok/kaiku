@@ -35,14 +35,14 @@ const {
   useRef,
   Component,
 } = getKaiku() as {
-  h: typeof kaiku.h,
-  Fragment: typeof kaiku.Fragment,
-  Component: typeof kaiku.Component,
-  render: typeof kaiku.render,
-  createState: typeof kaiku.createState,
-  useEffect: typeof kaiku.useEffect,
-  useState: typeof kaiku.useState,
-  useRef: typeof kaiku.useRef,
+  h: typeof kaiku.h
+  Fragment: typeof kaiku.Fragment
+  Component: typeof kaiku.Component
+  render: typeof kaiku.render
+  createState: typeof kaiku.createState
+  useEffect: typeof kaiku.useEffect
+  useState: typeof kaiku.useState
+  useRef: typeof kaiku.useRef
 }
 
 const nextTick = () => new Promise(process.nextTick)
@@ -406,7 +406,7 @@ describe('kaiku', () => {
         })),
     })
 
-    const Item = ({ item, key }: { item: any, key: any }) => {
+    const Item = ({ item, key }: { item: any; key: any }) => {
       itemRenderCounter(item)
       return <div>{item.name}</div>
     }
@@ -485,7 +485,7 @@ describe('kaiku', () => {
         })),
     })
 
-    const Item = ({ item }: { item: any, key: any }) => {
+    const Item = ({ item }: { item: any; key: any }) => {
       itemRenderCounter(item)
       return <div>{item.name}</div>
     }
@@ -1207,7 +1207,7 @@ describe('kaiku', () => {
 
   it('should not rerender a component depending on Object.keys unless the keys actually change', async () => {
     const state = createState({
-      obj: { a: undefined as undefined | string  },
+      obj: { a: undefined as undefined | string },
     })
 
     const reRenderCounter = jest.fn()

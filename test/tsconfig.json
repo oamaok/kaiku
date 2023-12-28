@@ -1,6 +1,12 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
+    "outDir": "dist",
+    "moduleResolution": "node",
+    "strict": true,
+    "noImplicitAny": true,
+    "downlevelIteration": true,
+    "declaration": true,
+    "lib": ["esnext", "dom"],
     "jsx": "react-jsx",
     "jsxImportSource": "../"
   }

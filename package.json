@@ -25,7 +25,7 @@
     "test:jsx:dev": "cross-env KAIKU_JSX_RUNTIME=true KAIKU_VERSION=development jest --coverage",
     "typings": "tsc --project tsconfig.json",
     "build": "rm -rf dist/ && node build.js",
-    "lint": "eslint src/*",
+    "lint": "eslint src/* test/*.tsx",
     "prettier": "prettier --write .",
     "prepublishOnly": "yarn build && yarn test && yarn lint && yarn typings"
   },
