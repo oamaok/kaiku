@@ -1048,6 +1048,10 @@ const updateElementProperty = (
       ;(element as HTMLElement).className = stringifyClassNames(value ?? '')
       break
     }
+    case 'html': {
+      ;(element as HTMLElement).innerHTML = value
+      break
+    }
     default: {
       if (!Boolean(value) && value !== 0) {
         element.removeAttribute(property)

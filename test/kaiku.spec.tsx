@@ -547,6 +547,16 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should be able to inject raw HTML', async () => {
+    const App = () => {
+      return <div html="<div>foo<span>bar</span></div>" />
+    }
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should update lazy props efficiently', async () => {
     const listRenderCounter = jest.fn()
     const itemRenderCounter = jest.fn()
