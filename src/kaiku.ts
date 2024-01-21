@@ -688,34 +688,24 @@ const useRef = <T>(initialValue?: T): Ref<T> =>
 //
 ///////////////
 
-const childrenToDescriptors = (children: Child[]): NodeDescriptor<any>[] => {
-  const result: NodeDescriptor<any>[] = []
-
-  for (const child of children) {
-    if (child === null || child === undefined || typeof child === 'boolean') {
-      result.push({ tag_: TextNodeTag, value_: '' })
-      continue
-    }
-
-    if (typeof child === 'string' || typeof child === 'number') {
-      result.push({ tag_: TextNodeTag, value_: child as string })
-      continue
-    }
-
-    if (Array.isArray(child)) {
-      result.push(createFragmentDescriptor(EMPTY_OBJECT, child))
-      continue
-    }
-
-    if (typeof child === 'function') {
-      result.push(h<any>(child, EMPTY_OBJECT))
-      continue
-    }
-
-    result.push(child)
+const childToDescriptor = (child: Child): NodeDescriptor<any> => {
+  if (child === null || child === undefined || typeof child === 'boolean') {
+    return { tag_: TextNodeTag, value_: '' }
   }
 
-  return result
+  if (typeof child === 'string' || typeof child === 'number') {
+    return { tag_: TextNodeTag, value_: child as string }
+  }
+
+  if (Array.isArray(child)) {
+    return createFragmentDescriptor(EMPTY_OBJECT, child)
+  }
+
+  if (typeof child === 'function') {
+    return h<any>(child, EMPTY_OBJECT)
+  }
+
+  return child
 }
 
 const reuseNodeInstance = (
@@ -955,7 +945,7 @@ const updateFragmentInstance = (
   instance: FragmentInstance,
   children: Child[]
 ) => {
-  const childDescriptors = childrenToDescriptors(children)
+  const childDescriptors = children.map(childToDescriptor)
 
   // NOTE: The fragment children are stored in reverse order to make
   // DOM operations on them easier.
