@@ -324,7 +324,17 @@ const dependeeToKeys: Map<DependeeId, Set<StateKey>> = new Map()
 const keyToDependees: Map<StateKey, Set<DependeeId>> = new Map()
 
 let updatedDependencies: StateKey[] = []
-const keyToId: Record<any, number> = {}
+const keyToId: Map<any, StateKey> = new Map()
+const getKeyId = (key: any): StateKey => {
+  const existingKey = keyToId.get(key)
+  if (existingKey) {
+    return existingKey
+  }
+
+  const id = (++nextKeyId * 0x4000000) as StateKey
+  keyToId.set(key, id)
+  return id
+}
 
 let deferredUpdateQueued = false
 
@@ -443,9 +453,7 @@ const createState = <T extends object>(obj: T): State<T> => {
       }
 
       if (trackedDependencyStack.length) {
-        const dependencyKey = (id +
-          (keyToId[key] ||
-            (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
+        const dependencyKey = (id + getKeyId(key)) as StateKey
         trackedDependencyStack[trackedDependencyStack.length - 1].add(
           dependencyKey
         )
@@ -525,8 +533,7 @@ const createState = <T extends object>(obj: T): State<T> => {
         updatedDependencies.push(id as StateKey)
       }
 
-      const dependencyKey = (id +
-        (keyToId[key] || (keyToId[key] = ++nextKeyId * 0x4000000))) as StateKey
+      const dependencyKey = (id + getKeyId(key)) as StateKey
       updatedDependencies.push(dependencyKey)
       if (!deferredUpdateQueued) {
         deferredUpdateQueued = true
