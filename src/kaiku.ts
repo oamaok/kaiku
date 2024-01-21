@@ -106,7 +106,7 @@ type ClassComponentInstance<
   tag_: typeof ClassComponentTag
   context_: Context
   instance: Component<PropertiesT, StateT>
-  props_: WithIntrinsicProps<PropertiesT>
+  props_: State<WithIntrinsicProps<PropertiesT>>
   child: NodeInstance<any> | null
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
@@ -117,7 +117,7 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   tag_: typeof FunctionComponentTag
   func: FunctionComponent<PropertiesT>
   context_: Context
-  props_: WithIntrinsicProps<PropertiesT>
+  props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: HtmlElementInstance | null
   nextSibling_: NodeInstance<any> | null
   child: NodeInstance<any> | null
@@ -715,21 +715,31 @@ const reuseNodeInstance = (
   instance: NodeInstance<DefaultProps>,
   descriptor: NodeDescriptor<DefaultProps>
 ): boolean => {
-  if (
-    instance.tag_ === ClassComponentTag &&
-    descriptor.tag_ === ClassComponentTag &&
-    instance.instance instanceof descriptor.class_
-  ) {
-    updateComponentInstance(instance, descriptor.props_)
-    return true
-  }
-
-  if (
+  const isSameFunctionComponent =
     instance.tag_ === FunctionComponentTag &&
     descriptor.tag_ === FunctionComponentTag &&
     instance.func === descriptor.func
-  ) {
-    updateComponentInstance(instance, descriptor.props_)
+
+  const isSameClassComponent =
+    instance.tag_ === ClassComponentTag &&
+    descriptor.tag_ === ClassComponentTag &&
+    instance.instance instanceof descriptor.class_
+
+  if (isSameFunctionComponent || isSameClassComponent) {
+    assert?.(
+      instance.tag_ === FunctionComponentTag ||
+        instance.tag_ === ClassComponentTag
+    )
+    assert?.(
+      descriptor.tag_ === FunctionComponentTag ||
+        descriptor.tag_ === ClassComponentTag
+    )
+
+    const keys = unionOfKeys(descriptor.props_, instance.props_)
+    for (const key of keys) {
+      instance.props_[key] =
+        descriptor.props_[key as keyof typeof descriptor.props_]
+    }
     return true
   }
 
@@ -808,7 +818,7 @@ const createClassComponentInstance = <
     tag_: ClassComponentTag,
     context_: context,
     instance: classInstance,
-    props_: descriptor.props_,
+    props_: createState(descriptor.props_),
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -842,7 +852,7 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
     tag_: FunctionComponentTag,
     context_: context,
     func: descriptor.func,
-    props_: descriptor.props_,
+    props_: createState(descriptor.props_),
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -862,24 +872,6 @@ const updateComponentInstance = <
     | ClassComponentInstance<PropertiesT, StateT>,
   props: WithIntrinsicProps<PropertiesT> = instance.props_
 ) => {
-  if (props !== instance.props_) {
-    const keys = unionOfKeys(props, instance.props_)
-    let equalProps = true
-
-    for (const key of keys) {
-      if (props[key] !== instance.props_[key]) {
-        equalProps = false
-        break
-      }
-    }
-
-    if (equalProps) {
-      return
-    }
-  }
-
-  instance.props_ = props
-
   let childDescriptor
   if (instance.tag_ === FunctionComponentTag) {
     startHookTracking(instance.id_)

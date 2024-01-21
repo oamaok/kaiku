@@ -90,6 +90,14 @@ exports[`kaiku should not refire previous lazy props if component re-renders 2`]
 
 exports[`kaiku should not refire previous lazy props if component re-renders 3`] = `"<div id=\\"1\\">1</div>"`;
 
+exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 1`] = `"<div id=\\"foo\\"></div>"`;
+
+exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 2`] = `"<div id=\\"bar\\"></div>"`;
+
+exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 3`] = `"<div id=\\"bar\\"></div>"`;
+
+exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 4`] = `"<div id=\\"foo\\"></div>"`;
+
 exports[`kaiku should remove an attribute if value is set to undefined 1`] = `"<div id=\\"foo\\"></div>"`;
 
 exports[`kaiku should remove an attribute if value is set to undefined 2`] = `"<div></div>"`;

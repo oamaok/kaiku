@@ -547,6 +547,113 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should only run effect dependant of a prop if the component body does not depend on it', async () => {
+    const componentRenderCounter = jest.fn()
+    const effectCallCounter = jest.fn()
+    const appRenderCounter = jest.fn()
+
+    const state = createState({ value: 'foo' })
+
+    const Component = (props: { value: string }) => {
+      useEffect(() => {
+        if (props.value) {
+          effectCallCounter()
+        }
+      })
+
+      componentRenderCounter()
+
+      return <div />
+    }
+
+    const App = () => {
+      appRenderCounter()
+      return <Component value={state.value} />
+    }
+
+    render(<App />, rootNode)
+
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+
+    state.value = 'bar'
+    await nextTick()
+    // Component doesn't re-render but the effect is called
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+    expect(appRenderCounter).toHaveBeenCalledTimes(2)
+
+    // No changes if the value remains the same
+    state.value = 'bar'
+    await nextTick()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+    expect(appRenderCounter).toHaveBeenCalledTimes(2)
+
+    state.value = 'foo'
+    await nextTick()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(effectCallCounter).toHaveBeenCalledTimes(3)
+    expect(appRenderCounter).toHaveBeenCalledTimes(3)
+  })
+
+  it("should only update lazy prop within a component if only the lazy prop is dependant on the component's prop", async () => {
+    const componentRenderCounter = jest.fn()
+    const propCallCounter = jest.fn()
+    const appRenderCounter = jest.fn()
+
+    const state = createState({ value: 'foo' })
+
+    const Component = (props: { value: string }) => {
+      componentRenderCounter()
+
+      return (
+        <div
+          id={() => {
+            propCallCounter()
+            return props.value
+          }}
+        />
+      )
+    }
+
+    const App = () => {
+      appRenderCounter()
+      return <Component value={state.value} />
+    }
+
+    render(<App />, rootNode)
+
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(propCallCounter).toHaveBeenCalledTimes(1)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.value = 'bar'
+    await nextTick()
+    // Component doesn't re-render but the prop update is called
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(propCallCounter).toHaveBeenCalledTimes(2)
+    expect(appRenderCounter).toHaveBeenCalledTimes(2)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    // No changes if the value remains the same
+    state.value = 'bar'
+    await nextTick()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(propCallCounter).toHaveBeenCalledTimes(2)
+    expect(appRenderCounter).toHaveBeenCalledTimes(2)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.value = 'foo'
+    await nextTick()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(propCallCounter).toHaveBeenCalledTimes(3)
+    expect(appRenderCounter).toHaveBeenCalledTimes(3)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should be able to inject raw HTML', async () => {
     const App = () => {
       return <div html="<div>foo<span>bar</span></div>" />
