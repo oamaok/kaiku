@@ -1,4 +1,6 @@
-import type * as kaiku from '../dist/kaiku.d.ts'
+import * as kaiku from '../src/kaiku'
+
+const isDevVersion = process.env.KAIKU_VERSION === 'development'
 
 const getKaiku = () => {
   switch (process.env.KAIKU_VERSION) {
@@ -34,6 +36,7 @@ const {
   useState,
   useRef,
   Component,
+  immutable,
 } = getKaiku() as {
   h: typeof kaiku.h
   Fragment: typeof kaiku.Fragment
@@ -43,6 +46,7 @@ const {
   useEffect: typeof kaiku.useEffect
   useState: typeof kaiku.useState
   useRef: typeof kaiku.useRef
+  immutable: typeof kaiku.immutable
 }
 
 const nextTick = () => new Promise(process.nextTick)
@@ -60,6 +64,16 @@ beforeEach(() => {
   ;[rootNode, secondRootNode].forEach((node) => {
     document.body.appendChild(node)
   })
+})
+
+const domManipulations = {
+  addEventListener: jest.spyOn(Element.prototype, 'addEventListener'),
+  removeEventListener: jest.spyOn(Element.prototype, 'removeEventListener'),
+  createElement: jest.spyOn(document, 'createElement'),
+}
+
+beforeEach(() => {
+  jest.clearAllMocks()
 })
 
 describe('kaiku', () => {
@@ -1001,23 +1015,23 @@ describe('kaiku', () => {
 
     render(<App />, rootNode)
 
-    expect(componentRenderCounter).toBeCalledTimes(1)
-    expect(lazySpanCallCounter).toBeCalledTimes(1)
-    expect(lazyDivCallCounter).toBeCalledTimes(1)
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(lazySpanCallCounter).toHaveBeenCalledTimes(1)
+    expect(lazyDivCallCounter).toHaveBeenCalledTimes(1)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.div++
     await nextTick()
-    expect(componentRenderCounter).toBeCalledTimes(1)
-    expect(lazySpanCallCounter).toBeCalledTimes(1)
-    expect(lazyDivCallCounter).toBeCalledTimes(2)
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(lazySpanCallCounter).toHaveBeenCalledTimes(1)
+    expect(lazyDivCallCounter).toHaveBeenCalledTimes(2)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.span++
     await nextTick()
-    expect(componentRenderCounter).toBeCalledTimes(1)
-    expect(lazySpanCallCounter).toBeCalledTimes(2)
-    expect(lazyDivCallCounter).toBeCalledTimes(2)
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(lazySpanCallCounter).toHaveBeenCalledTimes(2)
+    expect(lazyDivCallCounter).toHaveBeenCalledTimes(2)
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     state.span++
@@ -1030,9 +1044,9 @@ describe('kaiku', () => {
     state.div++
     state.div++
     await nextTick()
-    expect(componentRenderCounter).toBeCalledTimes(1)
-    expect(lazySpanCallCounter).toBeCalledTimes(3)
-    expect(lazyDivCallCounter).toBeCalledTimes(3)
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(lazySpanCallCounter).toHaveBeenCalledTimes(3)
+    expect(lazyDivCallCounter).toHaveBeenCalledTimes(3)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
@@ -1583,5 +1597,276 @@ describe('kaiku', () => {
     await nextTick()
     expect(effectCounter).toHaveBeenCalledTimes(3)
     expect(effectCounter).toHaveBeenCalledWith(undefined)
+  })
+
+  it('should handle changes in element event handlers', async () => {
+    const handlerA = jest.fn()
+    const handlerB = jest.fn()
+    const state = createState({ handler: 'a' })
+
+    const App = () => {
+      return (
+        <button onClick={state.handler === 'a' ? handlerA : handlerB}>
+          i am a button
+        </button>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(handlerA).toHaveBeenCalledTimes(0)
+    expect(handlerB).toHaveBeenCalledTimes(0)
+
+    const button = document.querySelector('button')!
+    button.click()
+
+    expect(handlerA).toHaveBeenCalledTimes(1)
+    expect(handlerB).toHaveBeenCalledTimes(0)
+
+    state.handler = 'b'
+    await nextTick()
+    button.click()
+
+    expect(handlerA).toHaveBeenCalledTimes(1)
+    expect(handlerB).toHaveBeenCalledTimes(1)
+
+    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
+  })
+
+  it('should remove event listener if handler is set to falsey value', async () => {
+    const state = createState({ hasHandler: true })
+    const noop = () => {}
+    const App = () => {
+      return (
+        <button onClick={state.hasHandler ? noop : null}>i am a button</button>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
+    expect(domManipulations.removeEventListener).toHaveBeenCalledTimes(0)
+
+    state.hasHandler = false
+    await nextTick()
+
+    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
+    expect(domManipulations.removeEventListener).toHaveBeenCalledTimes(1)
+  })
+
+  it('should unmount children of DOM elements', async () => {
+    const state = createState({ isMounted: true })
+    const App = () => {
+      return state.isMounted ? (
+        <div>
+          <span>hello</span>
+        </div>
+      ) : (
+        <div></div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.isMounted = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should react to state changes if key is a symbol', async () => {
+    const key = Symbol()
+    const state = createState({ [key]: true })
+    const App = () => {
+      return <div>{state[key] ? 'true' : 'false'}</div>
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state[key] = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should not react to changes in immutable state objects', async () => {
+    const state = createState({ imm: immutable({ foo: 'bar', bar: 'foo' }) })
+    const App = () => {
+      return <div>{state.imm.foo}</div>
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.imm.foo = 'not bar anymore'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should add dependency if `in` statement is used', async () => {
+    const state = createState({ obj: {} as Record<string, any> })
+    const App = () => {
+      return <div>{'key' in state.obj ? 'true' : 'false'}</div>
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.obj.key = true
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should not call lazy prop updates after element has unmounted', async () => {
+    const propCallCounter = jest.fn()
+
+    const state = createState({ isMounted: true, counter: 0 })
+    const App = () => {
+      return (
+        <div>
+          {state.isMounted ? (
+            <div
+              id={() => {
+                propCallCounter()
+                return `id-${state.counter}`
+              }}
+            />
+          ) : null}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(propCallCounter).toHaveBeenCalledTimes(1)
+
+    state.counter++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(propCallCounter).toHaveBeenCalledTimes(2)
+
+    state.isMounted = false
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(propCallCounter).toHaveBeenCalledTimes(2)
+
+    state.counter++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(propCallCounter).toHaveBeenCalledTimes(2)
+  })
+
+  it('should mount elements next to function components with no children', async () => {
+    const NullComponent = () => null
+    const App = () => {
+      return (
+        <div>
+          <div>foo</div>
+          <NullComponent />
+          <div>bar</div>
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should allow mounting multiple null components next to each other', async () => {
+    const NullComponent = () => null
+    const App = () => {
+      return (
+        <div>
+          <NullComponent />
+          <NullComponent />
+          <NullComponent />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should allow mounting function component next to null component', async () => {
+    const NullComponent = () => null
+    const Component = () => <div />
+    const App = () => {
+      return (
+        <div>
+          <Component />
+          <NullComponent />
+          <NullComponent />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should allow mounting fragment next to null component', async () => {
+    const NullComponent = () => null
+    const App = () => {
+      return (
+        <div>
+          <NullComponent />
+          <>foo</>
+          <NullComponent />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+  ;(isDevVersion ? it : it.skip)(
+    'should throw an error if duplicate keys are found',
+    async () => {
+      const keys = ['a', 'b', 'c', 'a']
+      const App = () => {
+        return (
+          <div>
+            {keys.map((k) => (
+              <div key={k}>{k}</div>
+            ))}
+          </div>
+        )
+      }
+
+      expect(() =>
+        render(<App />, rootNode)
+      ).toThrowErrorMatchingInlineSnapshot(
+        `"Duplicate key detected! Make sure no two sibling elements have the same key."`
+      )
+    }
+  )
+
+  it('should execute effects if another effect modifies dependency', async () => {
+    const effectCounterA = jest.fn()
+    const effectCounterB = jest.fn()
+
+    const state = createState({ run: false, a: 0, b: 0 })
+
+    useEffect(() => {
+      effectCounterB()
+      if (state.run && state.b < 10) {
+        state.a = 10
+      }
+    })
+
+    useEffect(() => {
+      effectCounterA()
+      if (state.run && state.a < 10) {
+        state.b = 10
+      }
+    })
+
+    expect(effectCounterA).toHaveBeenCalledTimes(1)
+    expect(effectCounterB).toHaveBeenCalledTimes(1)
+
+    state.run = true
+    await nextTick()
+
+    expect(effectCounterA).toHaveBeenCalledTimes(3)
+    expect(effectCounterB).toHaveBeenCalledTimes(2)
   })
 })

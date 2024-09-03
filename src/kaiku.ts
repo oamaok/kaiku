@@ -80,7 +80,6 @@ type FragmentDescriptor = {
 
 type HtmlElementDescriptor = {
   tag_: typeof HtmlElementTag
-  existingElement?: HTMLElement
   tagName_: HtmlElementTagName
   props_: HtmlElementProperties
   children_: Child[]
@@ -144,6 +143,8 @@ type HtmlElementInstance = {
   children_: FragmentInstance | null
   lazyPropUpdates: Map<string, LazyPropUpdate<any>> | null
   lazyStyleUpdates: Map<string, LazyStyleUpdate<any>> | null
+  eventHandlers: Record<string, (evt: Event) => void> | null
+  eventListener: ((evt: Event) => void) | null
 }
 
 type TextInstance = {
@@ -445,12 +446,7 @@ const createState = <T extends object>(obj: T): State<T> => {
   const proxy = new Proxy(obj, {
     get(target, key) {
       if (key === UNWRAP) return target
-
       if (key === STATE_FLAG) return true
-
-      if (typeof key === 'symbol') {
-        return target[key as keyof T]
-      }
 
       if (trackedDependencyStack.length) {
         const dependencyKey = (id + getKeyId(key)) as StateKey
@@ -493,6 +489,16 @@ const createState = <T extends object>(obj: T): State<T> => {
       return Reflect.ownKeys(target)
     },
 
+    has(target, key) {
+      if (trackedDependencyStack.length) {
+        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+          id as StateKey
+        )
+      }
+
+      return Reflect.has(target, key)
+    },
+
     set(target, _key, value) {
       const key = _key as keyof T
       const isNewKeyForTarget = !(key in target)
@@ -504,11 +510,6 @@ const createState = <T extends object>(obj: T): State<T> => {
           (value[STATE_FLAG] as boolean)) &&
         target[key] === value
       ) {
-        return true
-      }
-
-      if (typeof key === 'symbol') {
-        target[key] = value
         return true
       }
 
@@ -1200,14 +1201,12 @@ const createHtmlElementInstance = (
     context_ = { svgNs: useSvgNs }
   }
 
-  const element_ =
-    descriptor.existingElement ||
-    (useSvgNs
-      ? document.createElementNS(
-          'http://www.w3.org/2000/svg',
-          descriptor.tagName_
-        )
-      : document.createElement(descriptor.tagName_))
+  const element_ = useSvgNs
+    ? document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        descriptor.tagName_
+      )
+    : document.createElement(descriptor.tagName_)
 
   const instance: HtmlElementInstance = {
     tag_: HtmlElementTag,
@@ -1220,6 +1219,8 @@ const createHtmlElementInstance = (
     children_: null,
     lazyPropUpdates: null,
     lazyStyleUpdates: null,
+    eventHandlers: {},
+    eventListener: null,
   }
 
   updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
@@ -1274,18 +1275,38 @@ const updateHtmlElementInstance = (
     if (isListener) {
       const eventName = key.substring(2).toLowerCase()
 
-      if (key in instance.props_) {
-        instance.element_.removeEventListener(
-          eventName as any,
-          instance.props_[key] as any
-        )
+      if (!instance.eventListener) {
+        instance.eventHandlers = {}
+        instance.eventListener = (evt: Event) => {
+          const handlers = instance.eventHandlers
+          assert?.(
+            handlers,
+            'instance.eventHandlers record not initialized before event call'
+          )
+
+          const handler = handlers[evt.type]
+          assert?.(
+            handler,
+            `handler for event type '${evt.type}' not present in instance.eventHandlers`
+          )
+
+          return handler(evt)
+        }
       }
 
-      if (key in nextProps) {
-        instance.element_.addEventListener(
-          eventName as any,
-          nextProps[key] as any
-        )
+      assert?.(instance.eventHandlers)
+      assert?.(instance.eventListener)
+
+      if (typeof nextProps[key] === 'function') {
+        // Event handler is in next props
+        if (!(eventName in instance.eventHandlers)) {
+          instance.element_.addEventListener(eventName, instance.eventListener)
+        }
+        instance.eventHandlers[eventName] = nextProps[key]
+      } else {
+        // Event handler is NOT in next props
+        instance.element_.removeEventListener(eventName, instance.eventListener)
+        delete instance.eventHandlers[eventName]
       }
     } else {
       if (typeof nextProps[key] === 'function') {
@@ -1441,19 +1462,13 @@ const mountNodeInstance = <
 
 const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
+    case ClassComponentTag:
     case FunctionComponentTag: {
       destroyHooks(instance.id_)
       removeDependencies(instance)
-      if (instance.child) {
-        unmountNodeInstance(instance.child)
+      if (instance.tag_ === ClassComponentTag) {
+        instance.instance.componentWillUnmount()
       }
-      break
-    }
-
-    case ClassComponentTag: {
-      destroyHooks(instance.id_)
-      instance.instance.componentWillUnmount()
-      removeDependencies(instance)
       if (instance.child) {
         unmountNodeInstance(instance.child)
       }
@@ -1618,6 +1633,8 @@ const render: Render = <PropertiesT extends DefaultProps>(
     props_: EMPTY_OBJECT,
     lazyPropUpdates: null,
     lazyStyleUpdates: null,
+    eventHandlers: null,
+    eventListener: null,
   }
 
   const rootComponentInstance = createNodeInstance(descriptor, {

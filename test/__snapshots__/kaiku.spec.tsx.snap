@@ -1,5 +1,15 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`kaiku should add dependency if \`in\` statement is used 1`] = `"<div>false</div>"`;
+
+exports[`kaiku should add dependency if \`in\` statement is used 2`] = `"<div>true</div>"`;
+
+exports[`kaiku should allow mounting fragment next to null component 1`] = `"<div>foo</div>"`;
+
+exports[`kaiku should allow mounting function component next to null component 1`] = `"<div><div></div></div>"`;
+
+exports[`kaiku should allow mounting multiple null components next to each other 1`] = `"<div></div>"`;
+
 exports[`kaiku should be able to access this.props 1`] = `"<div>hello</div>"`;
 
 exports[`kaiku should be able to inject raw HTML 1`] = `"<div><div>foo<span>bar</span></div></div>"`;
@@ -84,6 +94,20 @@ exports[`kaiku should handle updates with Object.keys 5`] = `"<div><span>foobar<
 
 exports[`kaiku should handle updates with Object.keys 6`] = `"<div><span>foobar</span><span>barfoo</span></div>"`;
 
+exports[`kaiku should mount elements next to function components with no children 1`] = `"<div><div>foo</div><div>bar</div></div>"`;
+
+exports[`kaiku should not call lazy prop updates after element has unmounted 1`] = `"<div><div id=\\"id-0\\"></div></div>"`;
+
+exports[`kaiku should not call lazy prop updates after element has unmounted 2`] = `"<div><div id=\\"id-1\\"></div></div>"`;
+
+exports[`kaiku should not call lazy prop updates after element has unmounted 3`] = `"<div></div>"`;
+
+exports[`kaiku should not call lazy prop updates after element has unmounted 4`] = `"<div></div>"`;
+
+exports[`kaiku should not react to changes in immutable state objects 1`] = `"<div>bar</div>"`;
+
+exports[`kaiku should not react to changes in immutable state objects 2`] = `"<div>bar</div>"`;
+
 exports[`kaiku should not refire previous lazy props if component re-renders 1`] = `"<div id=\\"0\\">0</div>"`;
 
 exports[`kaiku should not refire previous lazy props if component re-renders 2`] = `"<div id=\\"0\\">1</div>"`;
@@ -97,6 +121,10 @@ exports[`kaiku should only update lazy prop within a component if only the lazy 
 exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 3`] = `"<div id=\\"bar\\"></div>"`;
 
 exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 4`] = `"<div id=\\"foo\\"></div>"`;
+
+exports[`kaiku should react to state changes if key is a symbol 1`] = `"<div>true</div>"`;
+
+exports[`kaiku should react to state changes if key is a symbol 2`] = `"<div>false</div>"`;
 
 exports[`kaiku should remove an attribute if value is set to undefined 1`] = `"<div id=\\"foo\\"></div>"`;
 
@@ -115,6 +143,10 @@ exports[`kaiku should toggle attributes for certain boolean attributes 2`] = `"<
 exports[`kaiku should toggle attributes for certain boolean attributes 3`] = `"<div><input type=\\"text\\"><input type=\\"checkbox\\"><select><option></option></select></div>"`;
 
 exports[`kaiku should toggle attributes for certain boolean attributes 4`] = `"<div><input type=\\"text\\" disabled=\\"true\\"><input type=\\"checkbox\\" checked=\\"true\\"><select><option selected=\\"true\\"></option></select></div>"`;
+
+exports[`kaiku should unmount children of DOM elements 1`] = `"<div><span>hello</span></div>"`;
+
+exports[`kaiku should unmount children of DOM elements 2`] = `"<div></div>"`;
 
 exports[`kaiku should update a simple counter 1`] = `"<div class=\\"app\\"><span id=\\"display\\">The counter is at 0</span><button>Add one!</button></div>"`;
 
