@@ -34,6 +34,8 @@ const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
 const UNWRAP = Symbol()
 
+const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
+
 type StateKey = number & { __: 'StateKey' }
 type DependeeId = number & { __: 'DependeeId' }
 
@@ -247,10 +249,9 @@ type Dependee =
   | LazyPropUpdate<any>
   | LazyStyleUpdate<any>
 
-type Render = <PropertiesT extends DefaultProps, StateT extends {}>(
+type Render = <PropertiesT extends DefaultProps>(
   rootDescriptor: NodeDescriptor<PropertiesT>,
-  rootElement: HTMLElement,
-  state?: State<StateT>
+  rootElement: HTMLElement | SVGElement
 ) => void
 
 type ClassNames = string | { [key: string]: boolean } | ClassNames[]
@@ -1202,10 +1203,7 @@ const createHtmlElementInstance = (
   }
 
   const element_ = useSvgNs
-    ? document.createElementNS(
-        'http://www.w3.org/2000/svg',
-        descriptor.tagName_
-      )
+    ? document.createElementNS(SVG_NAMESPACE_URI, descriptor.tagName_)
     : document.createElement(descriptor.tagName_)
 
   const instance: HtmlElementInstance = {
@@ -1618,16 +1616,16 @@ function jsx(
 
 const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  element: HTMLElement
+  element: HTMLElement | SVGElement
 ) => {
+  const svgNs = element.namespaceURI === SVG_NAMESPACE_URI
+
   const rootElementInstance: HtmlElementInstance = {
     tag_: HtmlElementTag,
     tagName_: element.tagName as HtmlElementTagName,
     element_: element,
     children_: null,
-    context_: {
-      svgNs: false,
-    },
+    context_: { svgNs },
     parentElement_: null,
     nextSibling_: null,
     props_: EMPTY_OBJECT,
@@ -1638,7 +1636,7 @@ const render: Render = <PropertiesT extends DefaultProps>(
   }
 
   const rootComponentInstance = createNodeInstance(descriptor, {
-    svgNs: false,
+    svgNs,
   })
 
   mountNodeInstance(rootComponentInstance, rootElementInstance, null)
