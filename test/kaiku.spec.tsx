@@ -304,7 +304,7 @@ describe('kaiku', () => {
       return <div>{state.obj.a && <Child />}</div>
     }
 
-    render(<App />, rootNode, state)
+    render(<App />, rootNode)
     expect(cleanupFunctionCallCounter).toHaveBeenCalledTimes(0)
 
     state.obj.a = false
@@ -1868,5 +1868,23 @@ describe('kaiku', () => {
 
     expect(effectCounterA).toHaveBeenCalledTimes(3)
     expect(effectCounterB).toHaveBeenCalledTimes(2)
+  })
+
+  it('should support recursive state objects', async () => {
+    const state = createState<any>({
+      obj: {},
+    })
+
+    state.obj.ref = state.obj
+  })
+
+  it('should support mutually recursive state objects', async () => {
+    const state = createState<any>({
+      obj1: {},
+      obj2: {},
+    })
+
+    state.obj1.ref = state.obj2
+    state.obj2.ref = state.obj1
   })
 })

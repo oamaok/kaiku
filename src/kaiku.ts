@@ -547,10 +547,9 @@ const createState = <T extends object>(obj: T): State<T> => {
   })
 
   // Recursively wrap all fields of the object by invoking the `set()` function
-  const keys = Object.keys(obj) as (keyof T)[]
-  for (const key of keys) {
-    if (typeof proxy[key] === 'object') {
-      proxy[key] = proxy[key]
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'object') {
+      proxy[key as keyof T] = value
     }
   }
   initializing = false
