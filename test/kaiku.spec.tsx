@@ -1887,4 +1887,23 @@ describe('kaiku', () => {
     state.obj1.ref = state.obj2
     state.obj2.ref = state.obj1
   })
+
+  it('should support fragments with keys', async () => {
+    const state = createState({ arr: [0, 1, 2, 3, 4] })
+
+    const App = () => {
+      return (
+        <div>
+          {state.arr.map((i) => (
+            <Fragment key={i}>
+              <div>{i}</div>
+            </Fragment>
+          ))}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
 })

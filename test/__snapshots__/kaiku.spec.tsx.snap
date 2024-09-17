@@ -136,6 +136,8 @@ exports[`kaiku should remove an attribute if value is set to undefined 4`] = `"<
 
 exports[`kaiku should render fragments perfectly 1`] = `"<span>Hello</span><span>world!</span>"`;
 
+exports[`kaiku should support fragments with keys 1`] = `"<div><div>0</div><div>1</div><div>2</div><div>3</div><div>4</div></div>"`;
+
 exports[`kaiku should toggle attributes for certain boolean attributes 1`] = `"<div><input type=\\"text\\"><input type=\\"checkbox\\"><select><option></option></select></div>"`;
 
 exports[`kaiku should toggle attributes for certain boolean attributes 2`] = `"<div><input type=\\"text\\" disabled=\\"true\\"><input type=\\"checkbox\\" checked=\\"true\\"><select><option selected=\\"true\\"></option></select></div>"`;
