@@ -62,6 +62,10 @@ terser
       inline: false,
       unsafe: true,
       booleans_as_integers: true,
+      module: true,
+
+      // This drops the `assert` calls in minified builds
+      pure_funcs: ['assert'],
     },
     mangle: {
       module: true,
