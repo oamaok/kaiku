@@ -1599,6 +1599,45 @@ describe('kaiku', () => {
     expect(effectCounter).toHaveBeenCalledWith(undefined)
   })
 
+  it('should set `ref.current` to `undefined` if element is re-used but not unmounted', async () => {
+    const effectCounter = jest.fn()
+    const state = createState({ isRef: false })
+
+    const App = () => {
+      const ref = useRef()
+
+      useEffect(() => {
+        effectCounter(ref.current)
+      })
+
+      return (
+        <div>
+          {state.isRef ? (
+            <div ref={ref} id="el">
+              foo
+            </div>
+          ) : (
+            <div />
+          )}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(effectCounter).toHaveBeenCalledTimes(1)
+    expect(effectCounter).toHaveBeenCalledWith(undefined)
+
+    state.isRef = true
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(2)
+    expect(effectCounter).toHaveBeenCalledWith(rootNode.querySelector('#el'))
+
+    state.isRef = false
+    await nextTick()
+    expect(effectCounter).toHaveBeenCalledTimes(3)
+    expect(effectCounter).toHaveBeenCalledWith(undefined)
+  })
+
   it('should handle changes in element event handlers', async () => {
     const handlerA = jest.fn()
     const handlerB = jest.fn()

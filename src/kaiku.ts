@@ -1055,7 +1055,6 @@ const updateElementProperty = (
   }
 }
 
-// TODO: Should be inlined. See above.
 const updateElementStyle = (
   element: HTMLElement | SVGElement,
   property: string,
@@ -1258,13 +1257,15 @@ const updateHtmlElementInstance = (
   // Handle properties other than `style`
   for (const key of keys) {
     if (key === 'style') continue
-
-    // TODO: Special case access to classsnames
-    if (instance.props_[key] === nextProps[key]) continue
     if (key === 'key') continue
+    if (instance.props_[key] === nextProps[key]) continue
 
     if (key === 'ref') {
-      nextProps[key]!.current = instance.element_
+      if (key in nextProps) {
+        nextProps[key]!.current = instance.element_
+      } else {
+        instance.props_[key]!.current = undefined
+      }
       continue
     }
 
