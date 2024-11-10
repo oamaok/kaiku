@@ -254,7 +254,12 @@ type Render = <PropertiesT extends DefaultProps>(
   rootElement: HTMLElement | SVGElement
 ) => void
 
-type ClassNames = string | { [key: string]: boolean } | ClassNames[]
+type ClassNames =
+  | undefined
+  | null
+  | string
+  | { [key: string]: boolean }
+  | ClassNames[]
 
 //
 //  Generic utilities
@@ -1161,6 +1166,10 @@ const destroyLazyUpdates = (instance: HtmlElementInstance) => {
 ///////////////
 
 const stringifyClassNames = (names: ClassNames): string => {
+  if (names === null || typeof names === 'undefined') {
+    return ''
+  }
+
   if (typeof names === 'string') {
     return names
   }

@@ -1945,4 +1945,22 @@ describe('kaiku', () => {
     render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should handle array of classnames including `undefined`', async () => {
+    const App = () => {
+      return <div class={[undefined]} />
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should handle array of classnames including `null`', async () => {
+    const App = () => {
+      return <div class={[null]} />
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
 })
