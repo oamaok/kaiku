@@ -1963,4 +1963,220 @@ describe('kaiku', () => {
     render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
+
+  it('should re-use component within array of keyed fragments', async () => {
+    let nextId = 0
+    const getNextId = () => nextId++
+
+    const componentRenderCalls = [] as { id: number; name: string }[]
+
+    const Component = ({ name }: { name: string }) => {
+      const state = useState({ id: getNextId() })
+
+      componentRenderCalls.push({
+        id: state.id,
+        name,
+      })
+
+      return <div>Hello, my name is {name}</div>
+    }
+
+    const globalState = createState({
+      selectedItems: ['foo'] as string[],
+    })
+
+    const items = ['foo', 'bar', 'qwerty', 'uiop']
+
+    const App = () => {
+      return (
+        <main>
+          {items
+            .filter((item) => globalState.selectedItems.includes(item))
+            .map((item) => (
+              <Fragment key={item}>
+                <Component name={item} />
+              </Fragment>
+            ))}
+        </main>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      {
+        name: 'foo',
+        id: 0,
+      },
+    ])
+
+    globalState.selectedItems.push('bar')
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+
+    globalState.selectedItems = ['bar']
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+  })
+
+  it('should re-use component deep within array of keyed fragments', async () => {
+    let nextId = 0
+    const getNextId = () => nextId++
+
+    const componentRenderCalls = [] as { id: number; name: string }[]
+
+    const Component = ({ name }: { name: string }) => {
+      const state = useState({ id: getNextId() })
+
+      componentRenderCalls.push({
+        id: state.id,
+        name,
+      })
+
+      return <div>Hello, my name is {name}</div>
+    }
+
+    const globalState = createState({
+      selectedItems: ['foo'] as string[],
+    })
+
+    const items = ['foo', 'bar', 'qwerty', 'uiop']
+
+    const App = () => {
+      return (
+        <main>
+          <div>foobar</div>
+          {items
+            .filter((item) => globalState.selectedItems.includes(item))
+            .map((item) => (
+              <Fragment key={item}>
+                <article>
+                  <div>foobar</div>
+                  <Component name={item} />
+                </article>
+              </Fragment>
+            ))}
+          <div>foobar</div>
+        </main>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      {
+        name: 'foo',
+        id: 0,
+      },
+    ])
+
+    globalState.selectedItems.push('bar')
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+
+    globalState.selectedItems = ['bar']
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+  })
+  it('should re-use component within array of keyed fragments', async () => {
+    let nextId = 0
+    const getNextId = () => nextId++
+
+    const componentRenderCalls = [] as { id: number; name: string }[]
+
+    const Component = ({ name }: { name: string }) => {
+      const state = useState({ id: getNextId() })
+
+      componentRenderCalls.push({
+        id: state.id,
+        name,
+      })
+
+      return <div>Hello, my name is {name}</div>
+    }
+
+    const Wrapper: kaiku.FC<{}> = ({ children }) => {
+      return <main>{children}</main>
+    }
+
+    const globalState = createState({
+      selectedItems: ['foo'] as string[],
+    })
+
+    const items = ['foo', 'bar', 'qwerty', 'uiop']
+
+    const App = () => {
+      return (
+        <Wrapper>
+          {items
+            .filter((item) => globalState.selectedItems.includes(item))
+            .map((item) => (
+              <Fragment key={item}>
+                <Component name={item} />
+              </Fragment>
+            ))}
+        </Wrapper>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      {
+        name: 'foo',
+        id: 0,
+      },
+    ])
+
+    globalState.selectedItems.push('bar')
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+
+    globalState.selectedItems = ['bar']
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCalls).toEqual([
+      { id: 0, name: 'foo' },
+      { id: 1, name: 'bar' },
+    ])
+  })
+
+  it('should trigger effect using array method after item is pushed', async () => {
+    const state = createState({
+      arr: [] as number[],
+    })
+
+    const effectCallCounter = jest.fn()
+
+    useEffect(() => {
+      const result = state.arr.map((item) => item * 2)
+      effectCallCounter(result)
+    })
+
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+
+    state.arr.push(1)
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+  })
 })

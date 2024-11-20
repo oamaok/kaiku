@@ -443,7 +443,7 @@ const removeDependencies = (dependee: Dependee) => {
   }
 }
 
-const createState = <T extends object>(obj: T): State<T> => {
+const createState = <T extends object>(obj: T, shallow = false): State<T> => {
   const id = ++nextObjectId
 
   const isArray = Array.isArray(obj)
@@ -508,28 +508,37 @@ const createState = <T extends object>(obj: T): State<T> => {
     set(target, _key, value) {
       const key = _key as keyof T
       const isNewKeyForTarget = !(key in target)
+      const isValueObject = typeof value === 'object'
+      const isValueNull = value === null
+      const isArrayLengthUpdate = isArray && key === 'length'
 
+      // Check if the value is unchanged and do an early return.
+      //
+      // If a value is pushed to an array, the proxy's `set` handler will be called
+      // on the key `length`. The value, however, will always be equal to the target's
+      // length. In this specific case, we cannot trust the equivalence and must
+      // treat the value as changed.
       if (
-        !(isArray && key === 'length') &&
-        (value === null ||
-          typeof value !== 'object' ||
-          (value[STATE_FLAG] as boolean)) &&
-        target[key] === value
+        target[key] === value &&
+        !isArrayLengthUpdate &&
+        (isValueNull || !isValueObject || (value[STATE_FLAG] as boolean))
       ) {
         return true
       }
 
       if (
-        value !== null &&
-        typeof value === 'object' &&
+        !isValueNull &&
+        isValueObject &&
         !(value[STATE_FLAG] as boolean) &&
-        !(value[IMMUTABLE_FLAG] as boolean)
+        !(value[IMMUTABLE_FLAG] as boolean) &&
+        !shallow
       ) {
         target[key] = createState(value)
       } else {
         target[key] = value
       }
 
+      // When initializing state, do not mark the new keys as dependencies.
       if (initializing) {
         return true
       }
@@ -551,12 +560,16 @@ const createState = <T extends object>(obj: T): State<T> => {
     },
   })
 
-  // Recursively wrap all fields of the object by invoking the `set()` function
-  for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'object') {
-      proxy[key as keyof T] = value
+  if (!shallow) {
+    // For non-shallow state objects, recursively wrap all fields of the
+    // object by invoking the `set()` function.
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'object') {
+        proxy[key as keyof T] = value
+      }
     }
   }
+
   initializing = false
   return proxy as State<T>
 }
@@ -660,7 +673,10 @@ const useEffect = (fn: () => void | (() => void)) => {
   componentEffects.push(effect)
 }
 
-const useState = <T extends object>(initialState: T): State<T> => {
+const useState = <T extends object>(
+  initialState: T,
+  shallow = false
+): State<T> => {
   const componentId = componentIdStack[componentIdStack.length - 1]
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
@@ -679,7 +695,7 @@ const useState = <T extends object>(initialState: T): State<T> => {
     return states[componentStateIndex]
   }
 
-  const componentState = createState(initialState)
+  const componentState = createState(initialState, shallow)
 
   states.push(componentState)
 
@@ -821,7 +837,7 @@ const createClassComponentInstance = <
     tag_: ClassComponentTag,
     context_: context,
     instance: classInstance,
-    props_: createState(descriptor.props_),
+    props_: createState(descriptor.props_, true),
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -855,7 +871,7 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
     tag_: FunctionComponentTag,
     context_: context,
     func: descriptor.func,
-    props_: createState(descriptor.props_),
+    props_: createState(descriptor.props_, true),
     parentElement_: null,
     nextSibling_: null,
     child: null,

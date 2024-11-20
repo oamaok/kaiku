@@ -126,6 +126,24 @@ exports[`kaiku should only update lazy prop within a component if only the lazy 
 
 exports[`kaiku should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 4`] = `"<div id=\\"foo\\"></div>"`;
 
+exports[`kaiku should re-use component deep within array of keyed fragments 1`] = `"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is foo</div></article><div>foobar</div></main>"`;
+
+exports[`kaiku should re-use component deep within array of keyed fragments 2`] = `"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is foo</div></article><article><div>foobar</div><div>Hello, my name is bar</div></article><div>foobar</div></main>"`;
+
+exports[`kaiku should re-use component deep within array of keyed fragments 3`] = `"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is bar</div></article><div>foobar</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 1`] = `"<main><div>Hello, my name is foo</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 2`] = `"<main><div>Hello, my name is foo</div><div>Hello, my name is bar</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 3`] = `"<main><div>Hello, my name is bar</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 4`] = `"<main><div>Hello, my name is foo</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 5`] = `"<main><div>Hello, my name is foo</div><div>Hello, my name is bar</div></main>"`;
+
+exports[`kaiku should re-use component within array of keyed fragments 6`] = `"<main><div>Hello, my name is bar</div></main>"`;
+
 exports[`kaiku should react to state changes if key is a symbol 1`] = `"<div>true</div>"`;
 
 exports[`kaiku should react to state changes if key is a symbol 2`] = `"<div>false</div>"`;
