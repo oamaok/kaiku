@@ -32,8 +32,10 @@ const {
   Fragment,
   render,
   createState,
+  createShallowState,
   useEffect,
   useState,
+  useShallowState,
   useRef,
   Component,
   immutable,
@@ -43,8 +45,10 @@ const {
   Component: typeof kaiku.Component
   render: typeof kaiku.render
   createState: typeof kaiku.createState
+  createShallowState: typeof kaiku.createShallowState
   useEffect: typeof kaiku.useEffect
   useState: typeof kaiku.useState
+  useShallowState: typeof kaiku.useShallowState
   useRef: typeof kaiku.useRef
   immutable: typeof kaiku.immutable
 }
@@ -2162,11 +2166,10 @@ describe('kaiku', () => {
   })
 
   it('should trigger effect using array method after item is pushed', async () => {
+    const effectCallCounter = jest.fn()
     const state = createState({
       arr: [] as number[],
     })
-
-    const effectCallCounter = jest.fn()
 
     useEffect(() => {
       const result = state.arr.map((item) => item * 2)
@@ -2178,5 +2181,62 @@ describe('kaiku', () => {
     state.arr.push(1)
     await nextTick()
     expect(effectCallCounter).toHaveBeenCalledTimes(2)
+  })
+
+  it('should not track deep state changes made to shallow state', async () => {
+    const effectCallCounter = jest.fn()
+    const state = createShallowState({
+      foo: {
+        a: 0,
+        b: 1,
+      },
+      bar: 'a',
+    })
+
+    useEffect(() => {
+      effectCallCounter(JSON.stringify(state))
+    })
+
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+
+    state.bar = 'b'
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+
+    state.foo.a = 123
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+  })
+
+  it('should not track deep state changes made to shallow sub-state of a normal state', async () => {
+    const effectCallCounter = jest.fn()
+    const subState = createShallowState({
+      foo: {
+        a: 0,
+        b: 1,
+      },
+    })
+    const state = createState({
+      subState,
+      bar: 'a',
+    })
+
+    useEffect(() => {
+      effectCallCounter(JSON.stringify(state))
+    })
+
+    expect(effectCallCounter).toHaveBeenCalledTimes(1)
+
+    state.bar = 'b'
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+
+    state.subState.foo.a = 123
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(2)
+
+    state.subState.foo = { a: 3, b: 4 }
+    await nextTick()
+    expect(effectCallCounter).toHaveBeenCalledTimes(3)
   })
 })

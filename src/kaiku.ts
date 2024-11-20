@@ -443,7 +443,10 @@ const removeDependencies = (dependee: Dependee) => {
   }
 }
 
-const createState = <T extends object>(obj: T, shallow = false): State<T> => {
+const internalCreateState = <T extends object>(
+  obj: T,
+  shallow: boolean
+): State<T> => {
   const id = ++nextObjectId
 
   const isArray = Array.isArray(obj)
@@ -574,6 +577,12 @@ const createState = <T extends object>(obj: T, shallow = false): State<T> => {
   return proxy as State<T>
 }
 
+const createState = <T extends object>(obj: T): State<T> =>
+  internalCreateState(obj, false)
+
+const createShallowState = <T extends object>(obj: T): State<T> =>
+  internalCreateState(obj, true)
+
 const unwrap = <T>(state: State<T>): T => {
   return state[UNWRAP]
 }
@@ -673,7 +682,7 @@ const useEffect = (fn: () => void | (() => void)) => {
   componentEffects.push(effect)
 }
 
-const useState = <T extends object>(
+const internalUseState = <T extends object>(
   initialState: T,
   shallow = false
 ): State<T> => {
@@ -695,15 +704,21 @@ const useState = <T extends object>(
     return states[componentStateIndex]
   }
 
-  const componentState = createState(initialState, shallow)
+  const componentState = internalCreateState(initialState, shallow)
 
   states.push(componentState)
 
   return componentState
 }
 
+const useState = <T extends object>(initialState: T): State<T> =>
+  internalUseState(initialState)
+
+const useShallowState = <T extends object>(initialState: T): State<T> =>
+  internalUseState(initialState, true)
+
 const useRef = <T>(initialValue?: T): Ref<T> =>
-  useState({ current: initialValue })
+  internalUseState({ current: initialValue }, true)
 
 //
 //  Node utilities
@@ -830,14 +845,14 @@ const createClassComponentInstance = <
   classInstance.render = classInstance.render.bind(classInstance)
 
   if (typeof classInstance.state !== 'undefined') {
-    classInstance.state = createState(classInstance.state) as any
+    classInstance.state = internalCreateState(classInstance.state, false) as any
   }
   const instance: ClassComponentInstance<PropertiesT, StateT> = {
     id_: id,
     tag_: ClassComponentTag,
     context_: context,
     instance: classInstance,
-    props_: createState(descriptor.props_, true),
+    props_: internalCreateState(descriptor.props_, true),
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -871,7 +886,7 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
     tag_: FunctionComponentTag,
     context_: context,
     func: descriptor.func,
-    props_: createState(descriptor.props_, true),
+    props_: internalCreateState(descriptor.props_, true),
     parentElement_: null,
     nextSibling_: null,
     child: null,
@@ -1676,9 +1691,11 @@ export {
   jsx,
   render,
   useState,
+  useShallowState,
   useRef,
   useEffect,
   createState,
+  createShallowState,
   immutable,
   unwrap,
 }
