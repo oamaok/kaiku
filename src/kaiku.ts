@@ -684,7 +684,7 @@ const useEffect = (fn: () => void | (() => void)) => {
 
 const internalUseState = <T extends object>(
   initialState: T,
-  shallow = false
+  shallow: boolean
 ): State<T> => {
   const componentId = componentIdStack[componentIdStack.length - 1]
   const componentStateIndex = componentStateIndexStack[
@@ -712,7 +712,7 @@ const internalUseState = <T extends object>(
 }
 
 const useState = <T extends object>(initialState: T): State<T> =>
-  internalUseState(initialState)
+  internalUseState(initialState, false)
 
 const useShallowState = <T extends object>(initialState: T): State<T> =>
   internalUseState(initialState, true)
