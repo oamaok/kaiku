@@ -104,9 +104,9 @@ type ClassComponentInstance<
   hasMounted: boolean
   instance: Component<PropertiesT, StateT>
   props_: State<WithIntrinsicProps<PropertiesT>>
-  child: NodeInstance<any> | null
   parentElement_: Element
-  nextSibling_: NodeInstance<any> | null
+  child?: NodeInstance<any>
+  nextSibling_?: NodeInstance<any>
 }
 
 type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
@@ -116,8 +116,8 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   hasMounted: boolean
   props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: Element
-  nextSibling_: NodeInstance<any> | null
-  child: NodeInstance<any> | null
+  nextSibling_?: NodeInstance<any>
+  child?: NodeInstance<any>
 }
 
 type FragmentInstance = {
@@ -127,7 +127,7 @@ type FragmentInstance = {
   children_: NodeInstance<DefaultProps>[]
   childMap: Map<string | number, NodeInstance<DefaultProps>>
   parentElement_: Element
-  nextSibling_: NodeInstance<any> | null
+  nextSibling_?: NodeInstance<any>
 }
 
 type HtmlElementInstance = {
@@ -137,12 +137,12 @@ type HtmlElementInstance = {
   props_: HtmlElementProperties
   hasMounted: boolean
   parentElement_: Element
-  nextSibling_: NodeInstance<any> | null
-  children_: FragmentInstance | null
-  lazyPropUpdates: Map<string, LazyPropUpdate<any>> | null
-  lazyStyleUpdates: Map<string, LazyStyleUpdate<any>> | null
-  eventHandlers: Record<string, (evt: Event) => void> | null
-  eventListener: ((evt: Event) => void) | null
+  nextSibling_?: NodeInstance<any>
+  children_?: FragmentInstance
+  lazyPropUpdates?: Map<string, LazyPropUpdate<any>>
+  lazyStyleUpdates?: Map<string, LazyStyleUpdate<any>>
+  eventHandlers?: Record<string, (evt: Event) => void>
+  eventListener?: (evt: Event) => void
 }
 
 type TextInstance = {
@@ -150,7 +150,7 @@ type TextInstance = {
   element_: Text
   hasMounted: boolean
   parentElement_: Element
-  nextSibling_: NodeInstance<any> | null
+  nextSibling_?: NodeInstance<any>
 }
 
 type NodeInstance<
@@ -851,8 +851,6 @@ const createClassComponentInstance = <
     instance: classInstance,
     props_: internalCreateState(descriptor.props_, true),
     parentElement_: parentElement,
-    nextSibling_: null,
-    child: null,
   }
 
   updateComponentInstance(instance)
@@ -885,8 +883,6 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
     func: descriptor.func,
     props_: internalCreateState(descriptor.props_, true),
     parentElement_: parentElement,
-    nextSibling_: null,
-    child: null,
   }
 
   updateComponentInstance(instance)
@@ -917,7 +913,7 @@ const updateComponentInstance = <
     if (instance.child) {
       unmountNodeInstance(instance.child)
     }
-    instance.child = null
+    delete instance.child
     return
   }
 
@@ -973,7 +969,6 @@ const createFragmentInstance = (
     props_: descriptor.props_,
     hasMounted: false,
     parentElement_: parentElement,
-    nextSibling_: null,
     childMap: new Map(),
     children_: [],
   }
@@ -1050,7 +1045,6 @@ const createTextInstance = (
     element_: document.createTextNode(descriptor.value_),
     hasMounted: false,
     parentElement_: parentElement,
-    nextSibling_: null,
   }
 }
 
@@ -1188,13 +1182,13 @@ const destroyLazyUpdates = (instance: HtmlElementInstance) => {
     for (const [, propUpdate] of instance.lazyPropUpdates) {
       removeDependencies(propUpdate)
     }
-    instance.lazyPropUpdates = null
+    delete instance.lazyPropUpdates
   }
   if (instance.lazyStyleUpdates) {
     for (const [, styleUpdate] of instance.lazyStyleUpdates) {
       removeDependencies(styleUpdate)
     }
-    instance.lazyStyleUpdates = null
+    delete instance.lazyStyleUpdates
   }
 }
 
@@ -1257,13 +1251,7 @@ const createHtmlElementInstance = (
     hasMounted: false,
     element_,
     parentElement_: parentElement,
-    nextSibling_: null,
     props_: EMPTY_OBJECT,
-    children_: null,
-    lazyPropUpdates: null,
-    lazyStyleUpdates: null,
-    eventHandlers: {},
-    eventListener: null,
   }
 
   updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
@@ -1369,7 +1357,7 @@ const updateHtmlElementInstance = (
       unmountNodeInstance(instance.children_)
     }
 
-    instance.children_ = null
+    delete instance.children_
   } else {
     if (instance.children_) {
       reuseNodeInstance(
@@ -1450,7 +1438,7 @@ const mountNodeInstance = <
 >(
   instance: NodeInstance<PropertiesT, StateT>,
   parentElement: Element,
-  nextSibling: NodeInstance<any> | null
+  nextSibling?: NodeInstance<any>
 ) => {
   assert?.(instance)
   assert?.(parentElement)
@@ -1474,7 +1462,7 @@ const mountNodeInstance = <
     case TextNodeTag:
     case HtmlElementTag: {
       if (instance.tag_ === HtmlElementTag && instance.children_) {
-        mountNodeInstance(instance.children_, instance.element_, null)
+        mountNodeInstance(instance.children_, instance.element_)
       }
 
       if (instance.hasMounted && instance.nextSibling_ === nextSibling) {
@@ -1484,7 +1472,7 @@ const mountNodeInstance = <
       instance.nextSibling_ = nextSibling
 
       const refElement = nextSibling && getNextSiblingElement(nextSibling)
-      parentElement.insertBefore(instance.element_, refElement)
+      parentElement.insertBefore(instance.element_, refElement as Node | null)
       break
     }
 
@@ -1663,7 +1651,7 @@ const render: Render = <PropertiesT extends DefaultProps>(
   element: HTMLElement | SVGElement
 ) => {
   const rootComponentInstance = createNodeInstance(descriptor, element)
-  mountNodeInstance(rootComponentInstance, element, null)
+  mountNodeInstance(rootComponentInstance, element)
 }
 
 export {
