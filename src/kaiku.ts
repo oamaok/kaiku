@@ -1345,8 +1345,8 @@ const getNextSiblingElement = (
   instance: NodeInstance<any>
 ): HTMLElement | SVGElement | Text | null => {
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       if (instance.child) {
         return getNextSiblingElement(instance.child)
       }
@@ -1357,6 +1357,10 @@ const getNextSiblingElement = (
 
       return null
     }
+
+    case HtmlElementTag:
+    case TextNodeTag:
+      return instance.element_
 
     case FragmentTag: {
       if (instance.children_.length !== 0) {
@@ -1371,10 +1375,6 @@ const getNextSiblingElement = (
 
       return null
     }
-
-    case TextNodeTag:
-    case HtmlElementTag:
-      return instance.element_
   }
 }
 
@@ -1390,8 +1390,8 @@ const mountNodeInstance = <
   assert?.(parentElement)
 
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       if (instance.child) {
         mountNodeInstance(instance.child, parentElement, nextSibling)
       }
@@ -1405,8 +1405,8 @@ const mountNodeInstance = <
       break
     }
 
-    case TextNodeTag:
-    case HtmlElementTag: {
+    case HtmlElementTag:
+    case TextNodeTag: {
       if (instance.tag_ === HtmlElementTag && instance.children_) {
         mountNodeInstance(instance.children_, instance.element_)
       }
@@ -1438,8 +1438,8 @@ const mountNodeInstance = <
 
 const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       destroyHooks(instance.id_)
       removeDependencies(instance)
       if (instance.tag_ === ClassComponentTag) {

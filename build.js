@@ -39,11 +39,11 @@ fs.writeFileSync(
     define: {
       __DEBUG__: false,
 
-      ClassComponentTag: tagId++,
       FunctionComponentTag: tagId++,
+      ClassComponentTag: tagId++,
       HtmlElementTag: tagId++,
-      FragmentTag: tagId++,
       TextNodeTag: tagId++,
+      FragmentTag: tagId++,
       EffectTag: tagId++,
       LazyPropUpdateTag: tagId++,
       LazyStyleUpdateTag: tagId++,
