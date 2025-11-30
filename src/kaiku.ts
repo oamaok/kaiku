@@ -47,6 +47,7 @@ type HtmlElementTagName =
 type HtmlElementProperties = Record<string, any> & {
   style?: Record<string, string | (() => string)>
   className?: ClassNames
+  ref?: Ref<Element>
 }
 
 export type DefaultProps = Record<string, any>
@@ -139,8 +140,7 @@ type HtmlElementInstance = {
   parentElement_: Element
   nextSibling_?: NodeInstance<any>
   children_?: FragmentInstance
-  lazyPropUpdates?: Map<string, LazyPropUpdate<any>>
-  lazyStyleUpdates?: Map<string, LazyStyleUpdate<any>>
+  lazyUpdates?: LazyUpdate<any>[]
   eventHandlers?: Record<string, (evt: Event) => void>
   eventListener?: (evt: Event) => void
 }
@@ -217,19 +217,10 @@ type Effect = {
   unsubscribe_?: () => void
 }
 
-type LazyPropUpdate<T> = {
+type LazyUpdate<T> = {
   id_: DependeeId
-  tag_: typeof LazyPropUpdateTag
+  tag_: typeof LazyPropUpdateTag | typeof LazyStyleUpdateTag
   element_: HTMLElement | SVGElement
-  property: string
-  callback: () => T
-  previousValue: T | undefined
-}
-
-type LazyStyleUpdate<T> = {
-  id_: DependeeId
-  tag_: typeof LazyStyleUpdateTag
-  element_: HTMLElement
   property: string
   callback: () => T
   previousValue: T | undefined
@@ -243,8 +234,7 @@ type Dependee =
   | ClassComponentInstance<any, any>
   | FunctionComponentInstance<any>
   | Effect
-  | LazyPropUpdate<any>
-  | LazyStyleUpdate<any>
+  | LazyUpdate<any>
 
 type Render = <PropertiesT extends DefaultProps>(
   rootDescriptor: NodeDescriptor<PropertiesT>,
@@ -263,7 +253,7 @@ type ClassNames =
 //
 ///////////////
 
-const EMPTY_OBJECT = {}
+const EMPTY_OBJECT = __DEBUG__ ? Object.freeze({}) : {}
 
 function __assert(
   condition: boolean | undefined | object | null,
@@ -309,12 +299,9 @@ const updateDependee = (dependee: Dependee) => {
       runEffect(dependee)
       break
     }
-    case LazyPropUpdateTag: {
-      runLazyPropUpdate(dependee)
-      break
-    }
+    case LazyPropUpdateTag:
     case LazyStyleUpdateTag: {
-      runLazyStyleUpdate(dependee)
+      runLazyUpdate(dependee)
       break
     }
   }
@@ -456,7 +443,7 @@ const internalCreateState = <T extends object>(
 
       if (trackedDependencyStack.length) {
         const dependencyKey = (id + getKeyId(key)) as StateKey
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           dependencyKey
         )
       }
@@ -487,7 +474,7 @@ const internalCreateState = <T extends object>(
 
     ownKeys(target) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           id as StateKey
         )
       }
@@ -497,7 +484,7 @@ const internalCreateState = <T extends object>(
 
     has(target, key) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           id as StateKey
         )
       }
@@ -686,7 +673,7 @@ const internalUseState = <T extends object>(
   const componentId = componentIdStack[componentIdStack.length - 1]
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
-  ]++
+  ]!++
 
   assert?.(typeof componentId !== 'undefined')
 
@@ -992,6 +979,8 @@ const updateFragmentInstance = (
 
   for (let i = childDescriptors.length - 1; i >= 0; i--) {
     const descriptor = childDescriptors[i]
+    assert?.(descriptor)
+
     const descriptorKey = getKeyOfNodeDescriptor(descriptor)
     const key = descriptorKey === null ? i : descriptorKey
 
@@ -1058,6 +1047,8 @@ const updateElementProperty = (
   property: string,
   value: any
 ) => {
+  assert?.(property !== 'style')
+
   switch (property) {
     case 'value': {
       ;(element as HTMLInputElement).value = value
@@ -1100,96 +1091,51 @@ const updateElementStyle = (
   element.style[property as any] = value
 }
 
-const registerLazyPropUpdate = <T>(
+const runLazyUpdate = <T>(lazyUpdate: LazyUpdate<T>) => {
+  const value = trackedExecute(lazyUpdate, lazyUpdate.callback)
+
+  if (value !== lazyUpdate.previousValue) {
+    lazyUpdate.previousValue = value
+
+    if (lazyUpdate.tag_ === LazyPropUpdateTag) {
+      updateElementProperty(lazyUpdate.element_, lazyUpdate.property, value)
+    } else {
+      updateElementStyle(lazyUpdate.element_, lazyUpdate.property, value)
+    }
+  }
+}
+
+const registerLazyUpdate = <T>(
   instance: HtmlElementInstance,
   property: string,
-  callback: () => T
+  callback: () => T,
+  type: typeof LazyPropUpdateTag | typeof LazyStyleUpdateTag
 ) => {
-  if (!instance.lazyPropUpdates) {
-    instance.lazyPropUpdates = new Map()
+  instance.lazyUpdates ??= []
+
+  let lazyUpdate: LazyUpdate<T> | undefined
+  for (const existingUpdate of instance.lazyUpdates) {
+    if (existingUpdate.tag_ === type && existingUpdate.property === property) {
+      lazyUpdate = existingUpdate
+      break
+    }
   }
 
-  let propUpdate: LazyPropUpdate<T> | undefined =
-    instance.lazyPropUpdates.get(property)
-
-  if (propUpdate) {
-    propUpdate.callback = callback
+  if (lazyUpdate) {
+    lazyUpdate.callback = callback
   } else {
-    propUpdate = {
+    lazyUpdate = {
       id_: ++nextDependeeId as DependeeId,
-      tag_: LazyPropUpdateTag,
+      tag_: type,
       element_: instance.element_,
       property,
       callback,
       previousValue: undefined,
     }
-    instance.lazyPropUpdates.set(property, propUpdate)
+    instance.lazyUpdates.push(lazyUpdate)
   }
 
-  runLazyPropUpdate(propUpdate)
-}
-
-const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
-  const value = trackedExecute(propUpdate, propUpdate.callback)
-
-  if (value !== propUpdate.previousValue) {
-    propUpdate.previousValue = value
-    updateElementProperty(propUpdate.element_, propUpdate.property, value)
-  }
-}
-
-const registerLazyStyleUpdate = <T>(
-  instance: HtmlElementInstance,
-  property: string,
-  callback: () => T
-) => {
-  if (!instance.lazyStyleUpdates) {
-    instance.lazyStyleUpdates = new Map()
-  }
-
-  let styleUpdate: LazyStyleUpdate<T> | undefined =
-    instance.lazyStyleUpdates.get(property)
-
-  if (styleUpdate) {
-    styleUpdate.callback = callback
-  } else {
-    styleUpdate = {
-      id_: ++nextDependeeId as DependeeId,
-      tag_: LazyStyleUpdateTag,
-      element_: instance.element_ as HTMLElement,
-      property,
-      callback,
-      previousValue: undefined,
-    }
-
-    instance.lazyStyleUpdates.set(property, styleUpdate)
-  }
-
-  runLazyStyleUpdate(styleUpdate)
-}
-
-const runLazyStyleUpdate = <T>(styleUpdate: LazyStyleUpdate<T>) => {
-  const value = trackedExecute(styleUpdate, styleUpdate.callback)
-
-  if (value !== styleUpdate.previousValue) {
-    styleUpdate.previousValue = value
-    updateElementStyle(styleUpdate.element_, styleUpdate.property, value)
-  }
-}
-
-const destroyLazyUpdates = (instance: HtmlElementInstance) => {
-  if (instance.lazyPropUpdates) {
-    for (const [, propUpdate] of instance.lazyPropUpdates) {
-      removeDependencies(propUpdate)
-    }
-    delete instance.lazyPropUpdates
-  }
-  if (instance.lazyStyleUpdates) {
-    for (const [, styleUpdate] of instance.lazyStyleUpdates) {
-      removeDependencies(styleUpdate)
-    }
-    delete instance.lazyStyleUpdates
-  }
+  runLazyUpdate(lazyUpdate)
 }
 
 //
@@ -1268,9 +1214,9 @@ const updateHtmlElementInstance = (
 
   // Handle the style prop
   const properties = unionOfKeys(
-    nextProps.style ||
+    nextProps.style ??
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>),
-    instance.props_.style ||
+    instance.props_.style ??
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>)
   )
 
@@ -1280,7 +1226,7 @@ const updateHtmlElementInstance = (
 
     if (prevValue !== value) {
       if (typeof value === 'function') {
-        registerLazyStyleUpdate(instance, property, value)
+        registerLazyUpdate(instance, property, value, LazyStyleUpdateTag)
       } else {
         updateElementStyle(instance.element_, property, value)
       }
@@ -1343,7 +1289,7 @@ const updateHtmlElementInstance = (
       }
     } else {
       if (typeof nextProps[key] === 'function') {
-        registerLazyPropUpdate(instance, key, nextProps[key])
+        registerLazyUpdate(instance, key, nextProps[key], LazyPropUpdateTag)
       } else {
         updateElementProperty(instance.element_, key, nextProps[key])
       }
@@ -1415,7 +1361,7 @@ const getNextSiblingElement = (
     case FragmentTag: {
       if (instance.children_.length !== 0) {
         return getNextSiblingElement(
-          instance.children_[instance.children_.length - 1]
+          instance.children_[instance.children_.length - 1]!
         )
       }
 
@@ -1510,7 +1456,7 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
         instance.props_.ref.current = undefined
       }
 
-      destroyLazyUpdates(instance)
+      instance.lazyUpdates?.forEach(removeDependencies)
       assert?.(instance.parentElement_)
       instance.parentElement_.removeChild(instance.element_)
       if (instance.children_) {
@@ -1565,24 +1511,24 @@ function h(
   if (typeof type === 'string') {
     return createHtmlElementDescriptor(
       type as HtmlElementTagName,
-      props || EMPTY_OBJECT,
+      props ?? EMPTY_OBJECT,
       children
     )
   }
 
   if (type[CLASS_COMPONENT_FLAG] as boolean) {
     return createClassComponentDescriptor(type, {
-      ...(props || EMPTY_OBJECT),
+      ...(props ?? EMPTY_OBJECT),
       children: children.length === 0 ? undefined : children,
     })
   }
 
   if (type === Fragment) {
-    return createFragmentDescriptor(props || EMPTY_OBJECT, children)
+    return createFragmentDescriptor(props ?? EMPTY_OBJECT, children)
   }
 
   return createFunctionComponentDescriptor(type, {
-    ...(props || EMPTY_OBJECT),
+    ...(props ?? EMPTY_OBJECT),
     children: children.length === 0 ? undefined : children,
   })
 }
@@ -1649,10 +1595,7 @@ function jsx(
 const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
   element: HTMLElement | SVGElement
-) => {
-  const rootComponentInstance = createNodeInstance(descriptor, element)
-  mountNodeInstance(rootComponentInstance, element)
-}
+) => mountNodeInstance(createNodeInstance(descriptor, element), element)
 
 export {
   Component,
