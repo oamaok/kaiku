@@ -108,6 +108,14 @@ exports[`kaiku should not call lazy prop updates after element has unmounted 3`]
 
 exports[`kaiku should not call lazy prop updates after element has unmounted 4`] = `"<div></div>"`;
 
+exports[`kaiku should not confuse lazy HTML property updates and style properties of the same name 1`] = `"<div width=\\"1\\"></div>"`;
+
+exports[`kaiku should not confuse lazy HTML property updates and style properties of the same name 2`] = `"<div width=\\"2\\"></div>"`;
+
+exports[`kaiku should not confuse lazy HTML property updates and style properties of the same name 3`] = `"<div width=\\"2\\"></div>"`;
+
+exports[`kaiku should not confuse lazy HTML property updates and style properties of the same name 4`] = `"<div width=\\"3\\"></div>"`;
+
 exports[`kaiku should not react to changes in immutable state objects 1`] = `"<div>bar</div>"`;
 
 exports[`kaiku should not react to changes in immutable state objects 2`] = `"<div>bar</div>"`;
