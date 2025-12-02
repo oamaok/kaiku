@@ -672,6 +672,64 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should not confuse lazy HTML property updates and style properties of the same name', async () => {
+    const htmlPropCallCounter = jest.fn()
+    const stylePropCallCounter = jest.fn()
+    const appRenderCounter = jest.fn()
+
+    const state = createState({ htmlWidth: 1, styleWidth: 1 })
+
+    const App = () => {
+      appRenderCounter()
+      return (
+        <div
+          width={() => {
+            htmlPropCallCounter()
+            return state.htmlWidth
+          }}
+          style={{
+            width: () => {
+              stylePropCallCounter()
+              return state.styleWidth
+            },
+          }}
+        />
+      )
+    }
+
+    render(<App />, rootNode)
+
+    expect(htmlPropCallCounter).toHaveBeenCalledTimes(1)
+    expect(stylePropCallCounter).toHaveBeenCalledTimes(1)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.htmlWidth++
+    await nextTick()
+    // HTML prop is updated, style prop is not
+    expect(htmlPropCallCounter).toHaveBeenCalledTimes(2)
+    expect(stylePropCallCounter).toHaveBeenCalledTimes(1)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.styleWidth++
+    await nextTick()
+    // Style prop is updated, HTML prop is not
+    expect(htmlPropCallCounter).toHaveBeenCalledTimes(2)
+    expect(stylePropCallCounter).toHaveBeenCalledTimes(2)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.styleWidth++
+    state.htmlWidth++
+    await nextTick()
+    // Both are updated
+    expect(htmlPropCallCounter).toHaveBeenCalledTimes(3)
+    expect(stylePropCallCounter).toHaveBeenCalledTimes(3)
+    expect(appRenderCounter).toHaveBeenCalledTimes(1)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should be able to inject raw HTML', async () => {
     const App = () => {
       return <div html="<div>foo<span>bar</span></div>" />

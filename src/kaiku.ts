@@ -39,10 +39,6 @@ const SVG_NAMESPACE_URI = 'http://www.w3.org/2000/svg'
 type StateKey = number & { __: 'StateKey' }
 type DependeeId = number & { __: 'DependeeId' }
 
-type Context = {
-  svgNs: boolean
-}
-
 type FragmentProperties = { key?: string | number }
 
 type HtmlElementTagName =
@@ -51,6 +47,7 @@ type HtmlElementTagName =
 type HtmlElementProperties = Record<string, any> & {
   style?: Record<string, string | (() => string)>
   className?: ClassNames
+  ref?: Ref<Element>
 }
 
 export type DefaultProps = Record<string, any>
@@ -105,33 +102,33 @@ type ClassComponentInstance<
 > = {
   id_: DependeeId
   tag_: typeof ClassComponentTag
-  context_: Context
+  hasMounted: boolean
   instance: Component<PropertiesT, StateT>
   props_: State<WithIntrinsicProps<PropertiesT>>
-  child: NodeInstance<any> | null
-  parentElement_: HtmlElementInstance | null
-  nextSibling_: NodeInstance<any> | null
+  parentElement_: Element
+  child?: NodeInstance<any>
+  nextSibling_?: NodeInstance<any>
 }
 
 type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   id_: DependeeId
   tag_: typeof FunctionComponentTag
   func: FunctionComponent<PropertiesT>
-  context_: Context
+  hasMounted: boolean
   props_: State<WithIntrinsicProps<PropertiesT>>
-  parentElement_: HtmlElementInstance | null
-  nextSibling_: NodeInstance<any> | null
-  child: NodeInstance<any> | null
+  parentElement_: Element
+  nextSibling_?: NodeInstance<any>
+  child?: NodeInstance<any>
 }
 
 type FragmentInstance = {
   tag_: typeof FragmentTag
-  context_: Context
+  hasMounted: boolean
   props_: FragmentProperties
   children_: NodeInstance<DefaultProps>[]
   childMap: Map<string | number, NodeInstance<DefaultProps>>
-  parentElement_: HtmlElementInstance | null
-  nextSibling_: NodeInstance<any> | null
+  parentElement_: Element
+  nextSibling_?: NodeInstance<any>
 }
 
 type HtmlElementInstance = {
@@ -139,21 +136,21 @@ type HtmlElementInstance = {
   tagName_: HtmlElementTagName
   element_: HTMLElement | SVGElement
   props_: HtmlElementProperties
-  context_: Context
-  parentElement_: HtmlElementInstance | null
-  nextSibling_: NodeInstance<any> | null
-  children_: FragmentInstance | null
-  lazyPropUpdates: Map<string, LazyPropUpdate<any>> | null
-  lazyStyleUpdates: Map<string, LazyStyleUpdate<any>> | null
-  eventHandlers: Record<string, (evt: Event) => void> | null
-  eventListener: ((evt: Event) => void) | null
+  hasMounted: boolean
+  parentElement_: Element
+  nextSibling_?: NodeInstance<any>
+  children_?: FragmentInstance
+  lazyUpdates?: LazyUpdate<any>[]
+  eventHandlers?: Record<string, (evt: Event) => void>
+  eventListener?: (evt: Event) => void
 }
 
 type TextInstance = {
   tag_: typeof TextNodeTag
   element_: Text
-  parentElement_: HtmlElementInstance | null
-  nextSibling_: NodeInstance<any> | null
+  hasMounted: boolean
+  parentElement_: Element
+  nextSibling_?: NodeInstance<any>
 }
 
 type NodeInstance<
@@ -220,19 +217,10 @@ type Effect = {
   unsubscribe_?: () => void
 }
 
-type LazyPropUpdate<T> = {
+type LazyUpdate<T> = {
   id_: DependeeId
-  tag_: typeof LazyPropUpdateTag
+  tag_: typeof LazyPropUpdateTag | typeof LazyStyleUpdateTag
   element_: HTMLElement | SVGElement
-  property: string
-  callback: () => T
-  previousValue: T | undefined
-}
-
-type LazyStyleUpdate<T> = {
-  id_: DependeeId
-  tag_: typeof LazyStyleUpdateTag
-  element_: HTMLElement
   property: string
   callback: () => T
   previousValue: T | undefined
@@ -246,8 +234,7 @@ type Dependee =
   | ClassComponentInstance<any, any>
   | FunctionComponentInstance<any>
   | Effect
-  | LazyPropUpdate<any>
-  | LazyStyleUpdate<any>
+  | LazyUpdate<any>
 
 type Render = <PropertiesT extends DefaultProps>(
   rootDescriptor: NodeDescriptor<PropertiesT>,
@@ -266,7 +253,7 @@ type ClassNames =
 //
 ///////////////
 
-const EMPTY_OBJECT = {}
+const EMPTY_OBJECT = __DEBUG__ ? Object.freeze({}) : {}
 
 function __assert(
   condition: boolean | undefined | object | null,
@@ -290,6 +277,7 @@ const unionOfKeys = <A extends object, B extends object>(
   }
   return res as (keyof (A & B))[]
 }
+
 const assert: typeof __assert = __DEBUG__
   ? __assert
   : (undefined as unknown as typeof __assert)
@@ -312,12 +300,9 @@ const updateDependee = (dependee: Dependee) => {
       runEffect(dependee)
       break
     }
-    case LazyPropUpdateTag: {
-      runLazyPropUpdate(dependee)
-      break
-    }
+    case LazyPropUpdateTag:
     case LazyStyleUpdateTag: {
-      runLazyStyleUpdate(dependee)
+      runLazyUpdate(dependee)
       break
     }
   }
@@ -459,7 +444,7 @@ const internalCreateState = <T extends object>(
 
       if (trackedDependencyStack.length) {
         const dependencyKey = (id + getKeyId(key)) as StateKey
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           dependencyKey
         )
       }
@@ -490,7 +475,7 @@ const internalCreateState = <T extends object>(
 
     ownKeys(target) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           id as StateKey
         )
       }
@@ -500,7 +485,7 @@ const internalCreateState = <T extends object>(
 
     has(target, key) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1].add(
+        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
           id as StateKey
         )
       }
@@ -689,7 +674,7 @@ const internalUseState = <T extends object>(
   const componentId = componentIdStack[componentIdStack.length - 1]
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
-  ]++
+  ]!++
 
   assert?.(typeof componentId !== 'undefined')
 
@@ -834,7 +819,7 @@ const createClassComponentInstance = <
   StateT extends {} | undefined = undefined
 >(
   descriptor: ClassComponentDescriptor<PropertiesT, StateT>,
-  context: Context
+  parentElement: Element
 ): ClassComponentInstance<PropertiesT, StateT> => {
   const id = ++nextDependeeId as DependeeId
 
@@ -850,12 +835,10 @@ const createClassComponentInstance = <
   const instance: ClassComponentInstance<PropertiesT, StateT> = {
     id_: id,
     tag_: ClassComponentTag,
-    context_: context,
+    hasMounted: false,
     instance: classInstance,
     props_: internalCreateState(descriptor.props_, true),
-    parentElement_: null,
-    nextSibling_: null,
-    child: null,
+    parentElement_: parentElement,
   }
 
   updateComponentInstance(instance)
@@ -879,17 +862,15 @@ const createFunctionComponentDescriptor = <PropertiesT extends DefaultProps>(
 
 const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
   descriptor: FunctionComponentDescriptor<PropertiesT>,
-  context: Context
+  parentElement: Element
 ): FunctionComponentInstance<PropertiesT> => {
   const instance: FunctionComponentInstance<PropertiesT> = {
     id_: ++nextDependeeId as DependeeId,
     tag_: FunctionComponentTag,
-    context_: context,
+    hasMounted: false,
     func: descriptor.func,
     props_: internalCreateState(descriptor.props_, true),
-    parentElement_: null,
-    nextSibling_: null,
-    child: null,
+    parentElement_: parentElement,
   }
 
   updateComponentInstance(instance)
@@ -920,23 +901,29 @@ const updateComponentInstance = <
     if (instance.child) {
       unmountNodeInstance(instance.child)
     }
-    instance.child = null
+    delete instance.child
     return
   }
 
   if (!instance.child) {
-    instance.child = createNodeInstance(childDescriptor, instance.context_)
+    instance.child = createNodeInstance(
+      childDescriptor,
+      instance.parentElement_
+    )
   } else {
     const wasReused = reuseNodeInstance(instance.child, childDescriptor)
 
     if (!wasReused) {
       unmountNodeInstance(instance.child)
-      const newChild = createNodeInstance(childDescriptor, instance.context_)
+      const newChild = createNodeInstance(
+        childDescriptor,
+        instance.parentElement_
+      )
       instance.child = newChild
     }
   }
 
-  if (instance.parentElement_) {
+  if (instance.hasMounted) {
     mountNodeInstance(instance, instance.parentElement_, instance.nextSibling_)
   }
 }
@@ -963,14 +950,13 @@ const createFragmentDescriptor = (
 
 const createFragmentInstance = (
   descriptor: FragmentDescriptor,
-  context_: Context
+  parentElement: Element
 ): FragmentInstance => {
   const instance: FragmentInstance = {
     tag_: FragmentTag,
     props_: descriptor.props_,
-    context_,
-    parentElement_: null,
-    nextSibling_: null,
+    hasMounted: false,
+    parentElement_: parentElement,
     childMap: new Map(),
     children_: [],
   }
@@ -994,6 +980,8 @@ const updateFragmentInstance = (
 
   for (let i = childDescriptors.length - 1; i >= 0; i--) {
     const descriptor = childDescriptors[i]
+    assert?.(descriptor)
+
     const descriptorKey = getKeyOfNodeDescriptor(descriptor)
     const key = descriptorKey === null ? i : descriptorKey
 
@@ -1019,7 +1007,7 @@ const updateFragmentInstance = (
         unmountNodeInstance(existingChild)
       }
 
-      const node = createNodeInstance(descriptor, instance.context_)
+      const node = createNodeInstance(descriptor, instance.parentElement_)
       instance.children_.push(node)
       instance.childMap.set(key, node)
     }
@@ -1038,12 +1026,15 @@ const updateFragmentInstance = (
 //
 ///////////////
 
-const createTextInstance = (descriptor: TextDescriptor): TextInstance => {
+const createTextInstance = (
+  descriptor: TextDescriptor,
+  parentElement: Element
+): TextInstance => {
   return {
     tag_: TextNodeTag,
     element_: document.createTextNode(descriptor.value_),
-    parentElement_: null,
-    nextSibling_: null,
+    hasMounted: false,
+    parentElement_: parentElement,
   }
 }
 
@@ -1057,6 +1048,8 @@ const updateElementProperty = (
   property: string,
   value: any
 ) => {
+  assert?.(property !== 'style')
+
   switch (property) {
     case 'value': {
       ;(element as HTMLInputElement).value = value
@@ -1099,96 +1092,51 @@ const updateElementStyle = (
   element.style[property as any] = value
 }
 
-const registerLazyPropUpdate = <T>(
+const runLazyUpdate = <T>(lazyUpdate: LazyUpdate<T>) => {
+  const value = trackedExecute(lazyUpdate, lazyUpdate.callback)
+
+  if (value !== lazyUpdate.previousValue) {
+    lazyUpdate.previousValue = value
+
+    if (lazyUpdate.tag_ === LazyPropUpdateTag) {
+      updateElementProperty(lazyUpdate.element_, lazyUpdate.property, value)
+    } else {
+      updateElementStyle(lazyUpdate.element_, lazyUpdate.property, value)
+    }
+  }
+}
+
+const registerLazyUpdate = <T>(
   instance: HtmlElementInstance,
   property: string,
-  callback: () => T
+  callback: () => T,
+  type: typeof LazyPropUpdateTag | typeof LazyStyleUpdateTag
 ) => {
-  if (!instance.lazyPropUpdates) {
-    instance.lazyPropUpdates = new Map()
+  instance.lazyUpdates ??= []
+
+  let lazyUpdate: LazyUpdate<T> | undefined
+  for (const existingUpdate of instance.lazyUpdates) {
+    if (existingUpdate.tag_ === type && existingUpdate.property === property) {
+      lazyUpdate = existingUpdate
+      break
+    }
   }
 
-  let propUpdate: LazyPropUpdate<T> | undefined =
-    instance.lazyPropUpdates.get(property)
-
-  if (propUpdate) {
-    propUpdate.callback = callback
+  if (lazyUpdate) {
+    lazyUpdate.callback = callback
   } else {
-    propUpdate = {
+    lazyUpdate = {
       id_: ++nextDependeeId as DependeeId,
-      tag_: LazyPropUpdateTag,
+      tag_: type,
       element_: instance.element_,
       property,
       callback,
       previousValue: undefined,
     }
-    instance.lazyPropUpdates.set(property, propUpdate)
+    instance.lazyUpdates.push(lazyUpdate)
   }
 
-  runLazyPropUpdate(propUpdate)
-}
-
-const runLazyPropUpdate = <T>(propUpdate: LazyPropUpdate<T>) => {
-  const value = trackedExecute(propUpdate, propUpdate.callback)
-
-  if (value !== propUpdate.previousValue) {
-    propUpdate.previousValue = value
-    updateElementProperty(propUpdate.element_, propUpdate.property, value)
-  }
-}
-
-const registerLazyStyleUpdate = <T>(
-  instance: HtmlElementInstance,
-  property: string,
-  callback: () => T
-) => {
-  if (!instance.lazyStyleUpdates) {
-    instance.lazyStyleUpdates = new Map()
-  }
-
-  let styleUpdate: LazyStyleUpdate<T> | undefined =
-    instance.lazyStyleUpdates.get(property)
-
-  if (styleUpdate) {
-    styleUpdate.callback = callback
-  } else {
-    styleUpdate = {
-      id_: ++nextDependeeId as DependeeId,
-      tag_: LazyStyleUpdateTag,
-      element_: instance.element_ as HTMLElement,
-      property,
-      callback,
-      previousValue: undefined,
-    }
-
-    instance.lazyStyleUpdates.set(property, styleUpdate)
-  }
-
-  runLazyStyleUpdate(styleUpdate)
-}
-
-const runLazyStyleUpdate = <T>(styleUpdate: LazyStyleUpdate<T>) => {
-  const value = trackedExecute(styleUpdate, styleUpdate.callback)
-
-  if (value !== styleUpdate.previousValue) {
-    styleUpdate.previousValue = value
-    updateElementStyle(styleUpdate.element_, styleUpdate.property, value)
-  }
-}
-
-const destroyLazyUpdates = (instance: HtmlElementInstance) => {
-  if (instance.lazyPropUpdates) {
-    for (const [, propUpdate] of instance.lazyPropUpdates) {
-      removeDependencies(propUpdate)
-    }
-    instance.lazyPropUpdates = null
-  }
-  if (instance.lazyStyleUpdates) {
-    for (const [, styleUpdate] of instance.lazyStyleUpdates) {
-      removeDependencies(styleUpdate)
-    }
-    instance.lazyStyleUpdates = null
-  }
+  runLazyUpdate(lazyUpdate)
 }
 
 //
@@ -1234,13 +1182,11 @@ const createHtmlElementDescriptor = (
 
 const createHtmlElementInstance = (
   descriptor: HtmlElementDescriptor,
-  context_: Context
+  parentElement: Element
 ): HtmlElementInstance => {
-  const useSvgNs = descriptor.tagName_ === 'svg' || context_.svgNs
-
-  if (context_.svgNs !== useSvgNs) {
-    context_ = { svgNs: useSvgNs }
-  }
+  const useSvgNs =
+    descriptor.tagName_ === 'svg' ||
+    parentElement.namespaceURI === SVG_NAMESPACE_URI
 
   const element_ = useSvgNs
     ? document.createElementNS(SVG_NAMESPACE_URI, descriptor.tagName_)
@@ -1249,16 +1195,10 @@ const createHtmlElementInstance = (
   const instance: HtmlElementInstance = {
     tag_: HtmlElementTag,
     tagName_: descriptor.tagName_,
-    context_,
+    hasMounted: false,
     element_,
-    parentElement_: null,
-    nextSibling_: null,
+    parentElement_: parentElement,
     props_: EMPTY_OBJECT,
-    children_: null,
-    lazyPropUpdates: null,
-    lazyStyleUpdates: null,
-    eventHandlers: {},
-    eventListener: null,
   }
 
   updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
@@ -1275,9 +1215,9 @@ const updateHtmlElementInstance = (
 
   // Handle the style prop
   const properties = unionOfKeys(
-    nextProps.style ||
+    nextProps.style ??
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>),
-    instance.props_.style ||
+    instance.props_.style ??
       (EMPTY_OBJECT as Exclude<HtmlElementProperties['style'], undefined>)
   )
 
@@ -1287,7 +1227,7 @@ const updateHtmlElementInstance = (
 
     if (prevValue !== value) {
       if (typeof value === 'function') {
-        registerLazyStyleUpdate(instance, property, value)
+        registerLazyUpdate(instance, property, value, LazyStyleUpdateTag)
       } else {
         updateElementStyle(instance.element_, property, value)
       }
@@ -1350,7 +1290,7 @@ const updateHtmlElementInstance = (
       }
     } else {
       if (typeof nextProps[key] === 'function') {
-        registerLazyPropUpdate(instance, key, nextProps[key])
+        registerLazyUpdate(instance, key, nextProps[key], LazyPropUpdateTag)
       } else {
         updateElementProperty(instance.element_, key, nextProps[key])
       }
@@ -1364,7 +1304,7 @@ const updateHtmlElementInstance = (
       unmountNodeInstance(instance.children_)
     }
 
-    instance.children_ = null
+    delete instance.children_
   } else {
     if (instance.children_) {
       reuseNodeInstance(
@@ -1374,7 +1314,7 @@ const updateHtmlElementInstance = (
     } else {
       instance.children_ = createFragmentInstance(
         createFragmentDescriptor(EMPTY_OBJECT, children),
-        instance.context_
+        instance.element_
       )
     }
   }
@@ -1385,30 +1325,29 @@ const updateHtmlElementInstance = (
 //
 ///////////////
 
+const NODE_CREATORS = {
+  [ClassComponentTag]: createClassComponentInstance,
+  [FunctionComponentTag]: createFunctionComponentInstance,
+  [HtmlElementTag]: createHtmlElementInstance,
+  [FragmentTag]: createFragmentInstance,
+  [TextNodeTag]: createTextInstance,
+} as const
+
 const createNodeInstance = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
-  context: Context
-): NodeInstance<PropertiesT> => {
-  switch (descriptor.tag_) {
-    case ClassComponentTag:
-      return createClassComponentInstance(descriptor, context)
-    case FunctionComponentTag:
-      return createFunctionComponentInstance(descriptor, context)
-    case HtmlElementTag:
-      return createHtmlElementInstance(descriptor, context)
-    case FragmentTag:
-      return createFragmentInstance(descriptor, context)
-    case TextNodeTag:
-      return createTextInstance(descriptor)
-  }
-}
+  parentElement: Element
+): NodeInstance<PropertiesT> =>
+  (NODE_CREATORS[descriptor.tag_] as typeof createNodeInstance)(
+    descriptor,
+    parentElement
+  )
 
 const getNextSiblingElement = (
   instance: NodeInstance<any>
 ): HTMLElement | SVGElement | Text | null => {
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       if (instance.child) {
         return getNextSiblingElement(instance.child)
       }
@@ -1420,10 +1359,14 @@ const getNextSiblingElement = (
       return null
     }
 
+    case HtmlElementTag:
+    case TextNodeTag:
+      return instance.element_
+
     case FragmentTag: {
       if (instance.children_.length !== 0) {
         return getNextSiblingElement(
-          instance.children_[instance.children_.length - 1]
+          instance.children_[instance.children_.length - 1]!
         )
       }
 
@@ -1433,10 +1376,6 @@ const getNextSiblingElement = (
 
       return null
     }
-
-    case TextNodeTag:
-    case HtmlElementTag:
-      return instance.element_
   }
 }
 
@@ -1445,47 +1384,42 @@ const mountNodeInstance = <
   StateT extends {} | undefined = undefined
 >(
   instance: NodeInstance<PropertiesT, StateT>,
-  parentElement: HtmlElementInstance,
-  nextSibling: NodeInstance<any> | null
+  parentElement: Element,
+  nextSibling?: NodeInstance<any>
 ) => {
   assert?.(instance)
   assert?.(parentElement)
 
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       if (instance.child) {
         mountNodeInstance(instance.child, parentElement, nextSibling)
       }
 
-      if (instance.tag_ === ClassComponentTag && !instance.parentElement_) {
+      if (instance.tag_ === ClassComponentTag && !instance.hasMounted) {
         instance.instance.componentDidMount()
       }
 
-      instance.parentElement_ = parentElement
       instance.nextSibling_ = nextSibling
 
       break
     }
 
-    case TextNodeTag:
-    case HtmlElementTag: {
+    case HtmlElementTag:
+    case TextNodeTag: {
       if (instance.tag_ === HtmlElementTag && instance.children_) {
-        mountNodeInstance(instance.children_, instance, null)
+        mountNodeInstance(instance.children_, instance.element_)
       }
 
-      if (
-        instance.parentElement_ === parentElement &&
-        instance.nextSibling_ === nextSibling
-      ) {
+      if (instance.hasMounted && instance.nextSibling_ === nextSibling) {
         break
       }
 
       instance.nextSibling_ = nextSibling
-      instance.parentElement_ = parentElement
 
       const refElement = nextSibling && getNextSiblingElement(nextSibling)
-      parentElement.element_.insertBefore(instance.element_, refElement)
+      parentElement.insertBefore(instance.element_, refElement as Node | null)
       break
     }
 
@@ -1496,14 +1430,17 @@ const mountNodeInstance = <
         mountNodeInstance(child, parentElement, nextSibling)
         nextSibling = child
       }
+      break
     }
   }
+
+  instance.hasMounted = true
 }
 
 const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
-    case ClassComponentTag:
-    case FunctionComponentTag: {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
       destroyHooks(instance.id_)
       removeDependencies(instance)
       if (instance.tag_ === ClassComponentTag) {
@@ -1520,9 +1457,9 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
         instance.props_.ref.current = undefined
       }
 
-      destroyLazyUpdates(instance)
+      instance.lazyUpdates?.forEach(removeDependencies)
       assert?.(instance.parentElement_)
-      instance.parentElement_.element_.removeChild(instance.element_)
+      instance.parentElement_.removeChild(instance.element_)
       if (instance.children_) {
         instance.children_.children_.forEach(unmountNodeInstance)
       }
@@ -1531,7 +1468,7 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
 
     case TextNodeTag: {
       assert?.(instance.parentElement_)
-      instance.parentElement_.element_.removeChild(instance.element_)
+      instance.parentElement_.removeChild(instance.element_)
       break
     }
 
@@ -1575,24 +1512,24 @@ function h(
   if (typeof type === 'string') {
     return createHtmlElementDescriptor(
       type as HtmlElementTagName,
-      props || EMPTY_OBJECT,
+      props ?? EMPTY_OBJECT,
       children
     )
   }
 
   if (type[CLASS_COMPONENT_FLAG] as boolean) {
     return createClassComponentDescriptor(type, {
-      ...(props || EMPTY_OBJECT),
+      ...(props ?? EMPTY_OBJECT),
       children: children.length === 0 ? undefined : children,
     })
   }
 
   if (type === Fragment) {
-    return createFragmentDescriptor(props || EMPTY_OBJECT, children)
+    return createFragmentDescriptor(props ?? EMPTY_OBJECT, children)
   }
 
   return createFunctionComponentDescriptor(type, {
-    ...(props || EMPTY_OBJECT),
+    ...(props ?? EMPTY_OBJECT),
     children: children.length === 0 ? undefined : children,
   })
 }
@@ -1659,30 +1596,7 @@ function jsx(
 const render: Render = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
   element: HTMLElement | SVGElement
-) => {
-  const svgNs = element.namespaceURI === SVG_NAMESPACE_URI
-
-  const rootElementInstance: HtmlElementInstance = {
-    tag_: HtmlElementTag,
-    tagName_: element.tagName as HtmlElementTagName,
-    element_: element,
-    children_: null,
-    context_: { svgNs },
-    parentElement_: null,
-    nextSibling_: null,
-    props_: EMPTY_OBJECT,
-    lazyPropUpdates: null,
-    lazyStyleUpdates: null,
-    eventHandlers: null,
-    eventListener: null,
-  }
-
-  const rootComponentInstance = createNodeInstance(descriptor, {
-    svgNs,
-  })
-
-  mountNodeInstance(rootComponentInstance, rootElementInstance, null)
-}
+) => mountNodeInstance(createNodeInstance(descriptor, element), element)
 
 export {
   Component,
