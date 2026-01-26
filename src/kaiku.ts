@@ -30,7 +30,6 @@ declare const LazyPropUpdateTag = 'LazyPropUpdateTag'
 declare const LazyStyleUpdateTag = 'LazyStyleUpdateTag'
 
 const CLASS_COMPONENT_FLAG = Symbol()
-const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
 const UNWRAP = Symbol()
 
@@ -207,8 +206,6 @@ export type Child =
 export type Children = Child[]
 
 type State<T> = T & { [UNWRAP]: T; [STATE_FLAG]: true }
-
-type Immutable<T extends {}> = T & { [IMMUTABLE_FLAG]: true }
 
 type Effect = {
   id_: DependeeId
@@ -518,7 +515,7 @@ const internalCreateState = <T extends object>(
         !isValueNull &&
         isValueObject &&
         !(value[STATE_FLAG] as boolean) &&
-        !(value[IMMUTABLE_FLAG] as boolean) &&
+        !Object.isFrozen(value) &&
         !shallow
       ) {
         target[key] = createState(value)
@@ -572,19 +569,7 @@ const unwrap = <T>(state: State<T>): T => {
   return state[UNWRAP]
 }
 
-const immutable = <T extends object>(obj: T): Immutable<T> => {
-  return new Proxy(obj, {
-    get(target, _key) {
-      const key = _key as keyof T
-
-      if (key === IMMUTABLE_FLAG) {
-        return true
-      }
-
-      return target[key]
-    },
-  }) as Immutable<T>
-}
+const immutable = <T extends object>(obj: T) => Object.freeze(obj)
 
 //
 //  Hooks
