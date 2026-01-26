@@ -1112,6 +1112,100 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should handle changes to lazy text children', async () => {
+    const componentRenderCounter = jest.fn()
+    const childCallCounter = jest.fn()
+
+    const state = createState({ counter: 0 })
+
+    const App = () => {
+      componentRenderCounter()
+
+      return (
+        <div>
+          {() => {
+            childCallCounter()
+            return `Counter is at ${state.counter}`
+          }}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(childCallCounter).toHaveBeenCalledTimes(1)
+
+    state.counter++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(childCallCounter).toHaveBeenCalledTimes(2)
+
+    state.counter++
+    state.counter++
+    state.counter++
+    state.counter++
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+    expect(componentRenderCounter).toHaveBeenCalledTimes(1)
+    expect(childCallCounter).toHaveBeenCalledTimes(3)
+  })
+
+  it('should allow components to return strings', async () => {
+    const state = createState({ strings: ['foo', 'bar'] })
+
+    const TextComponent = () => {
+      return state.strings.join(', ')
+    }
+
+    const App = () => {
+      return (
+        <div>
+          <TextComponent />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.strings.push('foobar')
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should allow components to switch from returning strings to HTML elements', async () => {
+    const state = createState({ type: 'text' })
+
+    const Component = () => {
+      if (state.type === 'text') {
+        return 'I am text!'
+      } else {
+        return <div>I am div!</div>
+      }
+    }
+
+    const App = () => {
+      return (
+        <div>
+          <Component />
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.type = 'div'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.type = 'text'
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should handle refs and related effect calls', async () => {
     const firstEffectCall = jest.fn()
     const secondEffectCall = jest.fn()
