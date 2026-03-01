@@ -4,6 +4,16 @@ exports[`kaiku should add dependency if \`in\` statement is used 1`] = `"<div>fa
 
 exports[`kaiku should add dependency if \`in\` statement is used 2`] = `"<div>true</div>"`;
 
+exports[`kaiku should allow components to return strings 1`] = `"<div>foo, bar</div>"`;
+
+exports[`kaiku should allow components to return strings 2`] = `"<div>foo, bar, foobar</div>"`;
+
+exports[`kaiku should allow components to switch from returning strings to HTML elements 1`] = `"<div>I am text!</div>"`;
+
+exports[`kaiku should allow components to switch from returning strings to HTML elements 2`] = `"<div><div>I am div!</div></div>"`;
+
+exports[`kaiku should allow components to switch from returning strings to HTML elements 3`] = `"<div>I am text!</div>"`;
+
 exports[`kaiku should allow mounting fragment next to null component 1`] = `"<div>foo</div>"`;
 
 exports[`kaiku should allow mounting function component next to null component 1`] = `"<div><div></div></div>"`;
@@ -17,6 +27,12 @@ exports[`kaiku should be able to inject raw HTML 1`] = `"<div><div>foo<span>bar<
 exports[`kaiku should handle array of classnames including \`null\` 1`] = `"<div class=\\"\\"></div>"`;
 
 exports[`kaiku should handle array of classnames including \`undefined\` 1`] = `"<div class=\\"\\"></div>"`;
+
+exports[`kaiku should handle changes to lazy text children 1`] = `"<div>Counter is at 0</div>"`;
+
+exports[`kaiku should handle changes to lazy text children 2`] = `"<div>Counter is at 1</div>"`;
+
+exports[`kaiku should handle changes to lazy text children 3`] = `"<div>Counter is at 5</div>"`;
 
 exports[`kaiku should handle changing rootNode.firstChild 1`] = `"<div>Hello, I am a div tag!</div>"`;
 

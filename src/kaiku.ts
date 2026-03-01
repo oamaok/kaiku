@@ -176,7 +176,7 @@ abstract class Component<
   componentDidMount() {}
   componentWillUnmount() {}
   abstract render(
-    props: WithIntrinsicProps<PropertiesT>
+    props?: WithIntrinsicProps<PropertiesT>
   ): NodeDescriptor<any> | null
 }
 
@@ -187,7 +187,7 @@ export type FunctionComponent<PropertiesT extends DefaultProps> = (
 export type FC<PropertiesT extends DefaultProps> =
   FunctionComponent<PropertiesT>
 
-type ClassComponent<
+export type ClassComponent<
   PropertiesT extends DefaultProps,
   StateT extends {} | undefined = undefined
 > = {
@@ -887,7 +887,7 @@ const updateComponentInstance = <
     | ClassComponentInstance<PropertiesT, StateT>,
   props: WithIntrinsicProps<PropertiesT> = instance.props_
 ) => {
-  let childDescriptor
+  let childDescriptor: NodeDescriptor<any> | null
   if (instance.tag_ === FunctionComponentTag) {
     startHookTracking(instance.id_)
     childDescriptor = trackedExecute(instance, instance.func, instance.props_)
@@ -933,9 +933,9 @@ const updateComponentInstance = <
 //
 ///////////////
 
-const Fragment = __DEBUG__
+const Fragment = (__DEBUG__
   ? () => assert(false, 'Fragment should not be called explicitly')
-  : () => {}
+  : () => {})
 
 const createFragmentDescriptor = (
   props_: FragmentProperties,
@@ -1336,11 +1336,17 @@ const NODE_CREATORS = {
 const createNodeInstance = <PropertiesT extends DefaultProps>(
   descriptor: NodeDescriptor<PropertiesT>,
   parentElement: Element
-): NodeInstance<PropertiesT> =>
-  (NODE_CREATORS[descriptor.tag_] as typeof createNodeInstance)(
+): NodeInstance<PropertiesT> => {
+  assert?.(
+    descriptor.tag_ in NODE_CREATORS,
+    `No node creator function present for tag "${String(descriptor.tag_)}"`
+  )
+
+  return (NODE_CREATORS[descriptor.tag_] as typeof createNodeInstance)(
     descriptor,
     parentElement
   )
+}
 
 const getNextSiblingElement = (
   instance: NodeInstance<any>
