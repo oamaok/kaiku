@@ -14,7 +14,7 @@ fs.writeFileSync(
   esbuild.transformSync(source, {
     loader: 'ts',
     define: {
-      __DEBUG__: true,
+      __DEBUG__: 'true',
 
       ClassComponentTag: '"ClassComponent"',
       FunctionComponentTag: '"FunctionComponent"',
@@ -32,21 +32,23 @@ console.timeEnd(' - time')
 console.log('Build production version')
 console.time(' - time')
 let tagId = 0
+const getNextTagId = () => (tagId++).toString()
+
 fs.writeFileSync(
   'dist/kaiku.js',
   esbuild.transformSync(source, {
     loader: 'ts',
     define: {
-      __DEBUG__: false,
+      __DEBUG__: 'false',
 
-      FunctionComponentTag: tagId++,
-      ClassComponentTag: tagId++,
-      HtmlElementTag: tagId++,
-      TextNodeTag: tagId++,
-      FragmentTag: tagId++,
-      EffectTag: tagId++,
-      LazyPropUpdateTag: tagId++,
-      LazyStyleUpdateTag: tagId++,
+      FunctionComponentTag: getNextTagId(),
+      ClassComponentTag: getNextTagId(),
+      HtmlElementTag: getNextTagId(),
+      TextNodeTag: getNextTagId(),
+      FragmentTag: getNextTagId(),
+      EffectTag: getNextTagId(),
+      LazyPropUpdateTag: getNextTagId(),
+      LazyStyleUpdateTag: getNextTagId(),
     },
   }).code
 )
