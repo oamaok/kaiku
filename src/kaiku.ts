@@ -444,7 +444,7 @@ const internalCreateState = <T extends object>(
 
       if (trackedDependencyStack.length) {
         const dependencyKey = (id + getKeyId(key)) as StateKey
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
+        trackedDependencyStack.at(-1)!.add(
           dependencyKey
         )
       }
@@ -475,7 +475,7 @@ const internalCreateState = <T extends object>(
 
     ownKeys(target) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
+        trackedDependencyStack.at(-1)!.add(
           id as StateKey
         )
       }
@@ -485,7 +485,7 @@ const internalCreateState = <T extends object>(
 
     has(target, key) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
+        trackedDependencyStack.at(-1)!.add(
           id as StateKey
         )
       }
@@ -635,7 +635,7 @@ const runEffect = (effect: Effect) => {
 }
 
 const useEffect = (fn: () => void | (() => void)) => {
-  const componentId = componentIdStack[componentIdStack.length - 1] as
+  const componentId = componentIdStack.at(-1) as
     | DependeeId
     | undefined
 
@@ -671,7 +671,7 @@ const internalUseState = <T extends object>(
   initialState: T,
   shallow: boolean
 ): State<T> => {
-  const componentId = componentIdStack[componentIdStack.length - 1]
+  const componentId = componentIdStack.at(-1)
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
   ]!++
@@ -1366,7 +1366,7 @@ const getNextSiblingElement = (
     case FragmentTag: {
       if (instance.children_.length !== 0) {
         return getNextSiblingElement(
-          instance.children_[instance.children_.length - 1]!
+          instance.children_.at(-1)!
         )
       }
 
