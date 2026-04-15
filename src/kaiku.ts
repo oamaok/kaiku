@@ -405,11 +405,7 @@ const trackedExecute = <F extends (...args: any[]) => any>(
   dependeeToKeys.set(dependee.id_, dependencies)
 
   for (const key of dependencies) {
-    let dependencies = keyToDependees.get(key)
-    if (!dependencies) {
-      dependencies = new Set()
-      keyToDependees.set(key, dependencies)
-    }
+    let dependencies = keyToDependees.getOrInsert(key, new Set())
     dependencies.add(dependee.id_)
   }
 
@@ -658,11 +654,7 @@ const useEffect = (fn: () => void | (() => void)) => {
     return
   }
 
-  let componentEffects = effects.get(componentId)
-  if (!componentEffects) {
-    componentEffects = []
-    effects.set(componentId, componentEffects)
-  }
+  const componentEffects = effects.getOrInsert(componentId, [])
   assert?.(componentEffects)
   componentEffects.push(effect)
 }
@@ -678,13 +670,7 @@ const internalUseState = <T extends object>(
 
   assert?.(typeof componentId !== 'undefined')
 
-  let states = componentStates.get(componentId)
-
-  if (!states) {
-    states = []
-    componentStates.set(componentId, states)
-  }
-
+  let states = componentStates.getOrInsert(componentId, [])
   if (states.length > componentStateIndex) {
     return states[componentStateIndex]
   }

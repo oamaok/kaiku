@@ -89,6 +89,7 @@ terser
           'Fragment',
           'state',
           'props',
+          'getOrInsert',
         ],
       },
     },

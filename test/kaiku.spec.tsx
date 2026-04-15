@@ -2,6 +2,16 @@ import * as kaiku from '../src/kaiku'
 
 const isDevVersion = process.env.KAIKU_VERSION === 'development'
 
+// Polyfill missing `Map.prototype.getOrInsert`
+Map.prototype.getOrInsert = function(key: any, defaultValue: any) {
+  if (this.has(key)) {
+    return this.get(key)
+  } else {
+    this.set(key, defaultValue)
+    return defaultValue
+  }
+}
+
 const getKaiku = () => {
   switch (process.env.KAIKU_VERSION) {
     case 'minified':
