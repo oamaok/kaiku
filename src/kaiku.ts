@@ -29,7 +29,6 @@ declare const EffectTag = 'EffectTag'
 declare const LazyPropUpdateTag = 'LazyPropUpdateTag'
 declare const LazyStyleUpdateTag = 'LazyStyleUpdateTag'
 
-const CLASS_COMPONENT_FLAG = Symbol()
 const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
 const UNWRAP = Symbol()
@@ -107,6 +106,10 @@ type ClassComponentInstance<
   props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: Element
   child?: NodeInstance<any>
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
 }
 
@@ -117,7 +120,12 @@ type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
   hasMounted: boolean
   props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: Element
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
+
   child?: NodeInstance<any>
 }
 
@@ -125,9 +133,24 @@ type FragmentInstance = {
   tag_: typeof FragmentTag
   hasMounted: boolean
   props_: FragmentProperties
+
+  /**
+   * List of the fragment children. These are stored in a reverse order
+   * to make DOM manipulations on them easier.
+   */
   children_: NodeInstance<DefaultProps>[]
+
+  /**
+   * Map of the children. Keyed by either `key` prop or the element index
+   * if key is not give.
+   */
   childMap: Map<string | number, NodeInstance<DefaultProps>>
+
   parentElement_: Element
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
 }
 
@@ -138,7 +161,12 @@ type HtmlElementInstance = {
   props_: HtmlElementProperties
   hasMounted: boolean
   parentElement_: Element
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
+
   children_?: FragmentInstance
   lazyUpdates?: LazyUpdate<any>[]
   eventHandlers?: Record<string, (evt: Event) => void>
@@ -168,7 +196,6 @@ abstract class Component<
   StateT extends {} | undefined = undefined
 > {
   props: PropertiesT = {} as PropertiesT
-  static [CLASS_COMPONENT_FLAG] = true
   state: StateT = undefined as StateT
   constructor(props: WithIntrinsicProps<PropertiesT>) {
     this.props = props
@@ -610,21 +637,6 @@ const stopHookTracking = () => {
   const componentId = componentIdStack.pop()
   assert?.(typeof componentId !== 'undefined')
   componentsThatHaveUpdatedAtLeastOnce.add(componentId)
-}
-
-const destroyHooks = (componentId: DependeeId) => {
-  componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
-  componentStates.delete(componentId)
-
-  const componentEffects = effects.get(componentId)
-  if (componentEffects) {
-    for (const effect of componentEffects) {
-      removeDependencies(effect)
-      effect.unsubscribe_?.()
-    }
-
-    effects.delete(componentId)
-  }
 }
 
 const runEffect = (effect: Effect) => {
@@ -1249,8 +1261,7 @@ const updateHtmlElementInstance = (
       continue
     }
 
-    // Probably faster than calling startsWith...
-    const isListener = key[0] === 'o' && key[1] === 'n'
+    const isListener = key.startsWith('on')
 
     if (isListener) {
       const eventName = key.substring(2).toLowerCase()
@@ -1441,7 +1452,22 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
     case FunctionComponentTag:
     case ClassComponentTag: {
-      destroyHooks(instance.id_)
+      {
+        // Destroy hooks
+        componentsThatHaveUpdatedAtLeastOnce.delete(instance.id_)
+        componentStates.delete(instance.id_)
+
+        const componentEffects = effects.get(instance.id_)
+        if (componentEffects) {
+          for (const effect of componentEffects) {
+            removeDependencies(effect)
+            effect.unsubscribe_?.()
+          }
+
+          effects.delete(instance.id_)
+        }
+      }
+
       removeDependencies(instance)
       if (instance.tag_ === ClassComponentTag) {
         instance.instance.componentWillUnmount()
@@ -1517,10 +1543,10 @@ function h(
     )
   }
 
-  if (type[CLASS_COMPONENT_FLAG] as boolean) {
+  if (Object.getPrototypeOf(type) === Component) {
     return createClassComponentDescriptor(type, {
       ...(props ?? EMPTY_OBJECT),
-      children: children.length === 0 ? undefined : children,
+      children,
     })
   }
 
@@ -1530,7 +1556,7 @@ function h(
 
   return createFunctionComponentDescriptor(type, {
     ...(props ?? EMPTY_OBJECT),
-    children: children.length === 0 ? undefined : children,
+    children,
   })
 }
 
@@ -1541,56 +1567,29 @@ function jsx(
 ): HtmlElementDescriptor
 function jsx<PropertiesT extends DefaultProps>(
   type: FunctionComponent<PropertiesT>,
-  props: PropertiesT | null,
+  props: PropertiesT,
   key?: string
 ): FunctionComponentDescriptor<PropertiesT>
 function jsx<PropertiesT extends DefaultProps>(
   type: ClassComponent<PropertiesT>,
-  props: PropertiesT | null,
+  props: PropertiesT,
   key?: string
 ): ClassComponentDescriptor<PropertiesT>
 function jsx(
   type: typeof Fragment,
-  props: null | { key?: string | number },
+  props: { key?: string | number },
   key?: string
 ): FragmentDescriptor
 function jsx(
   type: any,
-  props: DefaultProps | HtmlElementProperties | null,
+  props: DefaultProps | HtmlElementProperties,
   key?: string
 ): NodeDescriptor<any> {
-  let children = props?.children
-  children =
-    children !== undefined
-      ? Array.isArray(children)
-        ? children
-        : [children]
-      : undefined
-  const propsCopy: Record<string, any> = {
-    ...props,
-    children,
-    key,
-  }
-
-  if (typeof type === 'string') {
-    delete propsCopy.children
-    return createHtmlElementDescriptor(
-      type as HtmlElementTagName,
-      propsCopy,
-      children ?? []
-    )
-  }
-
-  if (type[CLASS_COMPONENT_FLAG] as boolean) {
-    return createClassComponentDescriptor(type, propsCopy)
-  }
-
-  if (type === Fragment) {
-    delete propsCopy.children
-    return createFragmentDescriptor(propsCopy, children ?? [])
-  }
-
-  return createFunctionComponentDescriptor(type, propsCopy)
+  let { children, ...restProps } = props
+  restProps.key = key
+  return children === undefined
+    ? h(type, restProps)
+    : h(type, restProps, Array.isArray(children) ? children : [children])
 }
 
 const render: Render = <PropertiesT extends DefaultProps>(

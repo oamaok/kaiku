@@ -54,8 +54,16 @@ console.timeEnd(' - time')
 
 console.log('Minify production version')
 console.time(' - time')
+
+let productionSource = fs.readFileSync('dist/kaiku.js').toString()
+
+// Strip assertations
+productionSource = productionSource.replace(/assert\?\.\([^)]*\)/g, '')
+
+fs.writeFileSync('dist/kaiku.prod.js', productionSource)
+
 terser
-  .minify(fs.readFileSync('dist/kaiku.js').toString(), {
+  .minify(productionSource, {
     sourceMap: true,
     compress: {
       passes: 3,
