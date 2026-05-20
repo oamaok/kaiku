@@ -167,6 +167,9 @@ type HtmlElementInstance = {
    */
   nextSibling_?: NodeInstance<any>
 
+  /**
+   * Children of the DOM element stored inside a fragment instance.
+   */
   children_?: FragmentInstance
   lazyUpdates?: LazyUpdate<any>[]
   eventHandlers?: Record<string, (evt: Event) => void>
@@ -746,56 +749,59 @@ const reuseNodeInstance = (
   instance: NodeInstance<DefaultProps>,
   descriptor: NodeDescriptor<DefaultProps>
 ): boolean => {
-  const isSameFunctionComponent =
-    instance.tag_ === FunctionComponentTag &&
-    descriptor.tag_ === FunctionComponentTag &&
-    instance.func === descriptor.func
+  if (instance.tag_ !== descriptor.tag_) return false
 
-  const isSameClassComponent =
-    instance.tag_ === ClassComponentTag &&
-    descriptor.tag_ === ClassComponentTag &&
-    instance.instance instanceof descriptor.class_
+  switch (instance.tag_) {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
+      assert?.(
+        descriptor.tag_ === FunctionComponentTag ||
+          descriptor.tag_ === ClassComponentTag
+      )
 
-  if (isSameFunctionComponent || isSameClassComponent) {
-    assert?.(
-      instance.tag_ === FunctionComponentTag ||
-        instance.tag_ === ClassComponentTag
-    )
-    assert?.(
-      descriptor.tag_ === FunctionComponentTag ||
-        descriptor.tag_ === ClassComponentTag
-    )
+      let hasSameBody: boolean
+      if (instance.tag_ === FunctionComponentTag) {
+        assert?.(descriptor.tag_ === FunctionComponentTag)
+        hasSameBody = instance.func === descriptor.func
+      } else {
+        assert?.(descriptor.tag_ === ClassComponentTag)
+        hasSameBody = instance.instance instanceof descriptor.class_
+      }
+      if (!hasSameBody) return false
 
-    const keys = unionOfKeys(descriptor.props_, instance.props_)
-    for (const key of keys) {
-      instance.props_[key] =
-        descriptor.props_[key as keyof typeof descriptor.props_]
+      const keys = unionOfKeys(descriptor.props_, instance.props_)
+      for (const key of keys) {
+        instance.props_[key] =
+          descriptor.props_[key as keyof typeof descriptor.props_]
+      }
+      return true
     }
-    return true
-  }
 
-  if (
-    instance.tag_ === HtmlElementTag &&
-    descriptor.tag_ === HtmlElementTag &&
-    instance.tagName_ === descriptor.tagName_
-  ) {
-    updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
-    return true
-  }
-
-  if (instance.tag_ === FragmentTag && descriptor.tag_ === FragmentTag) {
-    updateFragmentInstance(instance, descriptor.children_)
-    return true
-  }
-
-  if (instance.tag_ === TextNodeTag && descriptor.tag_ === TextNodeTag) {
-    if (instance.element_.data !== String(descriptor.value_)) {
-      instance.element_.data = descriptor.value_
+    case HtmlElementTag: {
+      assert?.(descriptor.tag_ === HtmlElementTag)
+      if (instance.tagName_ !== descriptor.tagName_) return false
+      updateHtmlElementInstance(
+        instance,
+        descriptor.props_,
+        descriptor.children_
+      )
+      return true
     }
-    return true
-  }
 
-  return false
+    case TextNodeTag: {
+      assert?.(descriptor.tag_ === TextNodeTag)
+      if (instance.element_.data !== String(descriptor.value_)) {
+        instance.element_.data = descriptor.value_
+      }
+      return true
+    }
+
+    case FragmentTag: {
+      assert?.(descriptor.tag_ === FragmentTag)
+      updateFragmentInstance(instance, descriptor.children_)
+      return true
+    }
+  }
 }
 
 const getKeyOfNodeDescriptor = (
