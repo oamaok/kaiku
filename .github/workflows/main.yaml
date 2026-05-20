@@ -18,16 +18,16 @@ jobs:
         with:
           node-version: '14.15.4'
       - name: Install packages
-        run: yarn install
+        run: pnpm install
       - name: Lint
-        run: yarn lint
+        run: pnpm lint
       - name: Build
-        run: yarn build
+        run: pnpm build
       - name: Test (development)
-        run: yarn test:dev
+        run: pnpm test:dev
       - name: Test (minified)
-        run: yarn test:minified
+        run: pnpm test:minified
       - name: Test (development, JSX runtime)
-        run: yarn test:jsx:dev
+        run: pnpm test:jsx:dev
       - name: Test (minified, JSX runtime)
-        run: yarn test:jsx:minified
+        run: pnpm test:jsx:minified

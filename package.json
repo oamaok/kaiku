@@ -18,7 +18,7 @@
     "jsx-runtime.js"
   ],
   "scripts": {
-    "test": "yarn build && yarn test:dev && yarn test:minified && yarn test:jsx:dev && yarn test:jsx:minified",
+    "test": "pnpm build && pnpm test:dev && pnpm test:minified && pnpm test:jsx:dev && pnpm test:jsx:minified",
     "test:minified": "cross-env KAIKU_VERSION=minified jest --coverage",
     "test:dev": "cross-env KAIKU_VERSION=development jest --coverage",
     "test:jsx:minified": "cross-env KAIKU_JSX_RUNTIME=true KAIKU_VERSION=minified jest --coverage",
@@ -28,7 +28,7 @@
     "lint": "eslint src/*",
     "prettier": "prettier --write .",
     "prettier:check": "prettier --check .",
-    "prepublishOnly": "yarn prettier:check && yarn lint && yarn build && yarn test && yarn typings"
+    "prepublishOnly": "pnpm prettier:check && pnpm lint && pnpm build && pnpm test && pnpm typings"
   },
   "devDependencies": {
     "@babel/plugin-transform-async-to-generator": "^7.24.7",

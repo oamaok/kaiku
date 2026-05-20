@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAge: 86400 # in minutes (60 days)
+savePrefix: ''

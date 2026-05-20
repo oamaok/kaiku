@@ -31,8 +31,8 @@ Or, just install the package using your favorite package manager:
 # With NPM
 npm i -s kaiku
 
-# With yarn
-yarn add kaiku
+# With pnpm
+pnpm add kaiku
 ```
 
 ## Example
