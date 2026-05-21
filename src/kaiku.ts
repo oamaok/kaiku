@@ -1132,28 +1132,23 @@ const registerLazyUpdate = <T>(
 ) => {
   instance.lazyUpdates ??= []
 
-  let lazyUpdate: LazyUpdate<T> | undefined
-  for (const existingUpdate of instance.lazyUpdates) {
-    if (existingUpdate.tag_ === type && existingUpdate.property === property) {
-      lazyUpdate = existingUpdate
-      break
+  for (const lazyUpdate of instance.lazyUpdates) {
+    if (lazyUpdate.tag_ === type && lazyUpdate.property === property) {
+      lazyUpdate.callback = callback
+      runLazyUpdate(lazyUpdate)
+      return
     }
   }
 
-  if (lazyUpdate) {
-    lazyUpdate.callback = callback
-  } else {
-    lazyUpdate = {
-      id_: ++nextDependeeId as DependeeId,
-      tag_: type,
-      element_: instance.element_,
-      property,
-      callback,
-      previousValue: undefined,
-    }
-    instance.lazyUpdates.push(lazyUpdate)
+  const lazyUpdate = {
+    id_: ++nextDependeeId as DependeeId,
+    tag_: type,
+    element_: instance.element_,
+    property,
+    callback,
+    previousValue: undefined,
   }
-
+  instance.lazyUpdates.push(lazyUpdate)
   runLazyUpdate(lazyUpdate)
 }
 
