@@ -1,0 +1,403 @@
+exports[`kaiku > should add dependency if \`in\` statement is used 1`] = `
+"<div>false</div>"
+`;
+
+exports[`kaiku > should add dependency if \`in\` statement is used 2`] = `
+"<div>true</div>"
+`;
+
+exports[`kaiku > should allow mounting fragment next to null component 1`] = `
+"<div>foo</div>"
+`;
+
+exports[`kaiku > should allow mounting function component next to null component 1`] = `
+"<div><div></div></div>"
+`;
+
+exports[`kaiku > should allow mounting multiple null components next to each other 1`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should be able to access this.props 1`] = `
+"<div>hello</div>"
+`;
+
+exports[`kaiku > should be able to inject raw HTML 1`] = `
+"<div><div>foo<span>bar</span></div></div>"
+`;
+
+exports[`kaiku > should handle array of classnames including \`null\` 1`] = `
+"<div class=\\"\\"></div>"
+`;
+
+exports[`kaiku > should handle array of classnames including \`undefined\` 1`] = `
+"<div class=\\"\\"></div>"
+`;
+
+exports[`kaiku > should handle changing rootNode.firstChild 1`] = `
+"<div>Hello, I am a div tag!</div>"
+`;
+
+exports[`kaiku > should handle changing rootNode.firstChild 2`] = `
+"<span>Hello, I am a span tag!</span>"
+`;
+
+exports[`kaiku > should handle class components 1`] = `
+"<div><span>Counter is at 0</span><button>Increase</button></div>"
+`;
+
+exports[`kaiku > should handle class components 2`] = `
+"<div><span>Counter is at 1</span><button>Increase</button></div>"
+`;
+
+exports[`kaiku > should handle component changing it's return tag 1`] = `
+"<div><div>Hello, I am a div tag!</div></div>"
+`;
+
+exports[`kaiku > should handle component changing it's return tag 2`] = `
+"<div><span>Hello, I am a span tag!</span></div>"
+`;
+
+exports[`kaiku > should handle fragments being unmounted 1`] = `
+"<div><span>Hello</span><span>world!</span></div>"
+`;
+
+exports[`kaiku > should handle fragments being unmounted 2`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle fragments being unmounted 3`] = `
+"<div><span>Hello</span><span>world!</span></div>"
+`;
+
+exports[`kaiku > should handle function expressions as children 1`] = `
+"<div><span>Hello</span><span>world!</span></div>"
+`;
+
+exports[`kaiku > should handle lazy children efficiently 1`] = `
+"<div><div>My counter is at 0</div><span>My counter is at 0</span></div>"
+`;
+
+exports[`kaiku > should handle lazy children efficiently 2`] = `
+"<div><div>My counter is at 1</div><span>My counter is at 0</span></div>"
+`;
+
+exports[`kaiku > should handle lazy children efficiently 3`] = `
+"<div><div>My counter is at 1</div><span>My counter is at 1</span></div>"
+`;
+
+exports[`kaiku > should handle lazy children efficiently 4`] = `
+"<div><div>My counter is at 5</div><span>My counter is at 5</span></div>"
+`;
+
+exports[`kaiku > should handle multiple array children in different positions 1`] = `
+"<div>0123<span>foo</span>abcd</div><div><h2>foo</h2><button>bar</button></div><div><h2>foo</h2><span>foobar</span><button>bar</button></div><div><h2>foo</h2><span>foobar</span><div>foobar</div><button>bar</button></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 1`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 2`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 3`] = `
+"<div><div>Hello world</div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 4`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 5`] = `
+"<div><div>Hello world</div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 6`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle nested components mounting and unmounting 7`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 1`] = `
+"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 2`] = `
+"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 3`] = `
+"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 4`] = `
+"<div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div><div>Hello, I am item number 5</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 5`] = `
+"<div><div>Hello, I am item number 4</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array efficiently 6`] = `
+"<div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 1`] = `
+"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 2`] = `
+"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>Hello, I am item number 2</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 3`] = `
+"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 4`] = `
+"<div><div><div>Hello, I am item number 0</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 4</div><div>Hello, I am item number 5</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 5`] = `
+"<div><div><div>Hello, I am item number 4</div><div>Hello, I am item number 1</div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates in an array within a lazy child efficiently 6`] = `
+"<div><div><div>I'm changing my name aswell!</div><div>Hello, I am item number 3</div><div>Hello, I am item number 0</div><div>Hello, I am item number 5</div></div></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 1`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 2`] = `
+"<div><span>foo</span></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 3`] = `
+"<div><span>foo</span><span>bar</span></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 4`] = `
+"<div><span>foo</span><span>foobar</span></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 5`] = `
+"<div><span>foobar</span></div>"
+`;
+
+exports[`kaiku > should handle updates with Object.keys 6`] = `
+"<div><span>foobar</span><span>barfoo</span></div>"
+`;
+
+exports[`kaiku > should mount elements next to function components with no children 1`] = `
+"<div><div>foo</div><div>bar</div></div>"
+`;
+
+exports[`kaiku > should not call lazy prop updates after element has unmounted 1`] = `
+"<div><div id=\\"id-0\\"></div></div>"
+`;
+
+exports[`kaiku > should not call lazy prop updates after element has unmounted 2`] = `
+"<div><div id=\\"id-1\\"></div></div>"
+`;
+
+exports[`kaiku > should not call lazy prop updates after element has unmounted 3`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should not call lazy prop updates after element has unmounted 4`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should not confuse lazy HTML property updates and style properties of the same name 1`] = `
+"<div width=\\"1\\"></div>"
+`;
+
+exports[`kaiku > should not confuse lazy HTML property updates and style properties of the same name 2`] = `
+"<div width=\\"2\\"></div>"
+`;
+
+exports[`kaiku > should not confuse lazy HTML property updates and style properties of the same name 3`] = `
+"<div width=\\"2\\"></div>"
+`;
+
+exports[`kaiku > should not confuse lazy HTML property updates and style properties of the same name 4`] = `
+"<div width=\\"3\\"></div>"
+`;
+
+exports[`kaiku > should not react to changes in immutable state objects 1`] = `
+"<div>bar</div>"
+`;
+
+exports[`kaiku > should not react to changes in immutable state objects 2`] = `
+"<div>bar</div>"
+`;
+
+exports[`kaiku > should not refire previous lazy props if component re-renders 1`] = `
+"<div id=\\"0\\">0</div>"
+`;
+
+exports[`kaiku > should not refire previous lazy props if component re-renders 2`] = `
+"<div id=\\"0\\">1</div>"
+`;
+
+exports[`kaiku > should not refire previous lazy props if component re-renders 3`] = `
+"<div id=\\"1\\">1</div>"
+`;
+
+exports[`kaiku > should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 1`] = `
+"<div id=\\"foo\\"></div>"
+`;
+
+exports[`kaiku > should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 2`] = `
+"<div id=\\"bar\\"></div>"
+`;
+
+exports[`kaiku > should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 3`] = `
+"<div id=\\"bar\\"></div>"
+`;
+
+exports[`kaiku > should only update lazy prop within a component if only the lazy prop is dependant on the component's prop 4`] = `
+"<div id=\\"foo\\"></div>"
+`;
+
+exports[`kaiku > should re-use component deep within array of keyed fragments 1`] = `
+"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is foo</div></article><div>foobar</div></main>"
+`;
+
+exports[`kaiku > should re-use component deep within array of keyed fragments 2`] = `
+"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is foo</div></article><article><div>foobar</div><div>Hello, my name is bar</div></article><div>foobar</div></main>"
+`;
+
+exports[`kaiku > should re-use component deep within array of keyed fragments 3`] = `
+"<main><div>foobar</div><article><div>foobar</div><div>Hello, my name is bar</div></article><div>foobar</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 1`] = `
+"<main><div>Hello, my name is foo</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 2`] = `
+"<main><div>Hello, my name is foo</div><div>Hello, my name is bar</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 3`] = `
+"<main><div>Hello, my name is bar</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 4`] = `
+"<main><div>Hello, my name is foo</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 5`] = `
+"<main><div>Hello, my name is foo</div><div>Hello, my name is bar</div></main>"
+`;
+
+exports[`kaiku > should re-use component within array of keyed fragments 6`] = `
+"<main><div>Hello, my name is bar</div></main>"
+`;
+
+exports[`kaiku > should react to state changes if key is a symbol 1`] = `
+"<div>true</div>"
+`;
+
+exports[`kaiku > should react to state changes if key is a symbol 2`] = `
+"<div>false</div>"
+`;
+
+exports[`kaiku > should remove an attribute if value is set to undefined 1`] = `
+"<div id=\\"foo\\"></div>"
+`;
+
+exports[`kaiku > should remove an attribute if value is set to undefined 2`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should remove an attribute if value is set to undefined 3`] = `
+"<div id=\\"bar\\"></div>"
+`;
+
+exports[`kaiku > should remove an attribute if value is set to undefined 4`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should render fragments perfectly 1`] = `
+"<span>Hello</span><span>world!</span>"
+`;
+
+exports[`kaiku > should render recursive components 1`] = `
+"<div>I am the final child!</div>"
+`;
+
+exports[`kaiku > should render recursive components 2`] = `
+"<div>I am the final child!</div>"
+`;
+
+exports[`kaiku > should render recursive components 3`] = `
+"<div>I am the final child!</div>"
+`;
+
+exports[`kaiku > should support fragments with keys 1`] = `
+"<div><div>0</div><div>1</div><div>2</div><div>3</div><div>4</div></div>"
+`;
+
+exports[`kaiku > should toggle attributes for certain boolean attributes 1`] = `
+"<div><input type=\\"text\\"><input type=\\"checkbox\\"><select><option></option></select></div>"
+`;
+
+exports[`kaiku > should toggle attributes for certain boolean attributes 2`] = `
+"<div><input type=\\"text\\" disabled=\\"true\\"><input type=\\"checkbox\\" checked=\\"true\\"><select><option selected=\\"true\\"></option></select></div>"
+`;
+
+exports[`kaiku > should toggle attributes for certain boolean attributes 3`] = `
+"<div><input type=\\"text\\"><input type=\\"checkbox\\"><select><option></option></select></div>"
+`;
+
+exports[`kaiku > should toggle attributes for certain boolean attributes 4`] = `
+"<div><input type=\\"text\\" disabled=\\"true\\"><input type=\\"checkbox\\" checked=\\"true\\"><select><option selected=\\"true\\"></option></select></div>"
+`;
+
+exports[`kaiku > should unmount children of DOM elements 1`] = `
+"<div><span>hello</span></div>"
+`;
+
+exports[`kaiku > should unmount children of DOM elements 2`] = `
+"<div></div>"
+`;
+
+exports[`kaiku > should update a simple counter 1`] = `
+"<div class=\\"app\\"><span id=\\"display\\">The counter is at 0</span><button>Add one!</button></div>"
+`;
+
+exports[`kaiku > should update a simple counter 2`] = `
+"<div class=\\"app\\"><span id=\\"display\\">The counter is at 1</span><button>Add one!</button></div>"
+`;
+
+exports[`kaiku > should update a simple counter using local state 1`] = `
+"<div><span>The counter is at 0</span><button>Add one!</button></div>"
+`;
+
+exports[`kaiku > should update a simple counter using local state 2`] = `
+"<div><span>The counter is at 1</span><button>Add one!</button></div>"
+`;
+
+exports[`kaiku > should update a simple counter using local state 3`] = `
+"<div><span>The counter is at 2</span><button>Add one!</button></div>"
+`;
+
+exports[`kaiku > should update lazy props efficiently 1`] = `
+"<div id=\\"list\\"><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div></div>"
+`;
+
+exports[`kaiku > should update lazy props efficiently 2`] = `
+"<div id=\\"list\\"><div style=\\"border-width: 10px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div></div>"
+`;
+
+exports[`kaiku > should update lazy props efficiently 3`] = `
+"<div id=\\"list\\"><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div><div style=\\"border-width: 0px;\\"></div></div>"
+`;

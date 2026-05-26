@@ -951,9 +951,11 @@ const updateComponentInstance = <
 //
 ///////////////
 
-const Fragment = __DEBUG__
-  ? () => assert(false, 'Fragment should not be called explicitly')
-  : () => {}
+const Fragment = (
+  __DEBUG__
+    ? () => assert(false, 'Fragment should not be called explicitly')
+    : () => null
+) as () => null
 
 const createFragmentDescriptor = (
   props_: FragmentProperties,

@@ -1,0 +1,36 @@
+{
+  "name": "kaiku",
+  "version": "1.26.2",
+  "description": "Lightweight UI framework",
+  "license": "MIT",
+  "author": "Teemu Pääkkönen",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oamaok/kaiku.git"
+  },
+  "main": "dist/index.js",
+  "unpkg": "dist/kaiku.min.js",
+  "files": [
+    "src/*",
+    "dist/*",
+    "jsx-runtime.d.ts",
+    "jsx-runtime.js"
+  ],
+  "scripts": {
+    "typings": "tsc --project tsconfig.json",
+    "build": "rm -rf dist/ && node build.js",
+    "test": "cd ../kaiku-test && pnpm test",
+    "prettier": "prettier --write .",
+    "prettier:check": "prettier --check .",
+    "prepublishOnly": "pnpm prettier:check && pnpm build && pnpm typings && pnpm test"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.12.29",
+    "prettier": "^2.8.8",
+    "terser": "^5.33.0",
+    "tsx": "4.22.3",
+    "typescript": "^4.9.5"
+  }
+}
