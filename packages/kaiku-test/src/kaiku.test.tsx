@@ -11,10 +11,10 @@ import {
   useRef,
   Component,
   immutable,
+  FC
 } from 'kaiku'
 
 const isDevVersion = process.env.NODE_ENV === 'development'
-
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -40,7 +40,6 @@ describe('kaiku', () => {
 
   it('should render a span to body', async () => {
     const App = () => <span id="test">Hello world!</span>
-
     render(<App />, rootNode)
 
     const span = document.getElementById('test')
@@ -2154,7 +2153,7 @@ describe('kaiku', () => {
       return <div>Hello, my name is {name}</div>
     }
 
-    const Wrapper: kaiku.FC<{}> = ({ children }) => {
+    const Wrapper: FC<{}> = ({ children }) => {
       return <main>{children}</main>
     }
 

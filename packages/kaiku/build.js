@@ -100,9 +100,7 @@ terser
     },
   })
   .then((minified) => {
-    minified.code += '\n//# sourceMappingURL=kaiku.min.js.map'
-
     fs.writeFileSync('dist/kaiku.min.js', minified.code)
     fs.writeFileSync('dist/kaiku.min.js.map', minified.map)
+    console.timeEnd(' - time')
   })
-console.timeEnd(' - time')

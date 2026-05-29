@@ -128,3 +128,5 @@ export const it = (name: string, fn: () => void | Promise<void>) =>
   test.it(name, (t) => testContextStorage.run(t, fn))
 
 it.skip = test.it.skip
+it.only = (name: string, fn: () => void | Promise<void>) =>
+  test.only(name, (t) => testContextStorage.run(t, fn))
