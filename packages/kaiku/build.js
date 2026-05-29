@@ -68,6 +68,7 @@ terser
     compress: {
       passes: 3,
       inline: false,
+      reduce_funcs: false,
       unsafe: true,
       booleans_as_integers: true,
       module: true,

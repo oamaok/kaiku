@@ -923,23 +923,11 @@ const updateComponentInstance = <
     return
   }
 
-  if (!instance.child) {
-    instance.child = createNodeInstance(
-      childDescriptor,
-      instance.parentElement_
-    )
-  } else {
-    const wasReused = reuseNodeInstance(instance.child, childDescriptor)
-
-    if (!wasReused) {
-      unmountNodeInstance(instance.child)
-      const newChild = createNodeInstance(
-        childDescriptor,
-        instance.parentElement_
-      )
-      instance.child = newChild
-    }
-  }
+  instance.child = updateChild(
+    childDescriptor,
+    instance.parentElement_,
+    instance.child
+  )
 
   if (instance.hasMounted) {
     mountNodeInstance(instance, instance.parentElement_, instance.nextSibling_)
@@ -986,6 +974,23 @@ const createFragmentInstance = (
   return instance
 }
 
+const updateChild = (
+  childDescriptor: NodeDescriptor<any>,
+  parentElement: Element,
+  existingChild: NodeInstance<any> | undefined
+) => {
+  if (!existingChild) {
+    return createNodeInstance(childDescriptor, parentElement)
+  }
+
+  const wasReused = reuseNodeInstance(existingChild, childDescriptor)
+  if (wasReused) return existingChild
+
+  unmountNodeInstance(existingChild)
+  const newChild = createNodeInstance(childDescriptor, parentElement)
+  return newChild
+}
+
 const updateNodeInstanceChildren = (
   instance: FragmentInstance | HtmlElementInstance,
   children: Child[]
@@ -1023,22 +1028,14 @@ const updateNodeInstanceChildren = (
 
     nextkeys.add(key)
 
-    const existingChild = instance.childMap.get(key)
-    const wasReused =
-      existingChild && reuseNodeInstance(existingChild, descriptor)
+    const child = updateChild(
+      descriptor,
+      parentElement,
+      instance.childMap.get(key)
+    )
 
-    if (wasReused) {
-      assert?.(existingChild)
-      instance.children_.push(existingChild)
-    } else {
-      if (existingChild) {
-        unmountNodeInstance(existingChild)
-      }
-
-      const node = createNodeInstance(descriptor, parentElement)
-      instance.children_.push(node)
-      instance.childMap.set(key, node)
-    }
+    instance.children_.push(child)
+    instance.childMap.set(key, child)
   }
 
   for (const [key, child] of instance.childMap) {
