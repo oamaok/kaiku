@@ -7,7 +7,7 @@ const html =
   '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>'
 const jsdom = new JSDOM.JSDOM(html)
 
-global.window = jsdom.window as unknown as (Window & typeof globalThis)
+global.window = jsdom.window as unknown as Window & typeof globalThis
 global.document = jsdom.window.document
 global.Element = jsdom.window.Element
 
@@ -32,11 +32,11 @@ type FnAssertations = {
   toThrow(message: any): void
 }
 
-type Expect<T> = (T extends MockFn
+type Expect<T> = T extends MockFn
   ? MockFnAssertations
   : T extends () => unknown
   ? FnAssertations
-  : BaseAssertations)
+  : BaseAssertations
 
 export const mockFn = (): MockFn => {
   const calls: any[] = []
@@ -94,7 +94,10 @@ export const expect = <T>(actual: T): Expect<T> => {
   } as Expect<T>
 }
 
-const createDomManipExpectation = <T extends {}, K extends keyof T>(obj: T, key: K) => {
+const createDomManipExpectation = <T extends {}, K extends keyof T>(
+  obj: T,
+  key: K
+) => {
   let count = 0
   test.beforeEach(() => {
     count = 0
@@ -111,14 +114,20 @@ const createDomManipExpectation = <T extends {}, K extends keyof T>(obj: T, key:
   return {
     toHaveBeenCalledTimes(expected: number) {
       assert.equal(count, expected)
-    }
+    },
   }
 }
 
 expect.dom = {
   createElement: createDomManipExpectation(document, 'createElement'),
-  addEventListener: createDomManipExpectation(Element.prototype, 'addEventListener'),
-  removeEventListener: createDomManipExpectation(Element.prototype, 'removeEventListener'),
+  addEventListener: createDomManipExpectation(
+    Element.prototype,
+    'addEventListener'
+  ),
+  removeEventListener: createDomManipExpectation(
+    Element.prototype,
+    'removeEventListener'
+  ),
 } as const
 
 export const describe = test.describe

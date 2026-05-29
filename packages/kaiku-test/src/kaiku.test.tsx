@@ -11,7 +11,7 @@ import {
   useRef,
   Component,
   immutable,
-  FC
+  FC,
 } from 'kaiku'
 
 const isDevVersion = process.env.NODE_ENV === 'development'
@@ -1211,6 +1211,24 @@ describe('kaiku', () => {
     expect(componentDidMountCall).toHaveBeenCalledTimes(1)
   })
 
+  it('should call componentDidMount even if the component renders nothing', async () => {
+    const componentDidMountCall = mockFn()
+
+    class App extends Component {
+      componentDidMount() {
+        componentDidMountCall()
+      }
+
+      render() {
+        return null
+      }
+    }
+
+    render(<App />, rootNode)
+
+    expect(componentDidMountCall).toHaveBeenCalledTimes(1)
+  })
+
   it('should call componentWillUnmount', async () => {
     const state = createState({ ticker: 0 })
 
@@ -1253,6 +1271,25 @@ describe('kaiku', () => {
         <span>Hello</span>
         <span>world!</span>
       </>
+    )
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should render fragments next to other fragments', async () => {
+    const App = () => (
+      <div>
+        <>
+          <span>Hello</span>
+          <span>world!</span>
+        </>
+        <>
+          <b>foo</b>
+          <i>bar</i>
+        </>
+      </div>
     )
 
     render(<App />, rootNode)
@@ -1898,7 +1935,6 @@ describe('kaiku', () => {
     render(<App />, rootNode)
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
-
   ;(isDevVersion ? it : it.skip)(
     'should throw an error if duplicate keys are found',
     async () => {

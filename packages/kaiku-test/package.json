@@ -14,7 +14,9 @@
     "test:dev": "NODE_ENV=development pnpm tsx --test ./src/kaiku.test.tsx",
     "test:prod": "NODE_ENV=production pnpm tsx --test ./src/kaiku.test.tsx",
     "test": "pnpm test:dev && pnpm test:prod",
-    "update-snapshots": "pnpm tsx --test-update-snapshots ./src/kaiku.test.tsx"
+    "update-snapshots": "pnpm tsx --test-update-snapshots ./src/kaiku.test.tsx",
+    "prettier": "prettier --write .",
+    "prettier:check": "prettier --check ."
   },
   "devDependencies": {
     "kaiku": "link:../kaiku",

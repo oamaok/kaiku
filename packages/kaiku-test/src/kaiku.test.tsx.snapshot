@@ -326,6 +326,10 @@ exports[`kaiku > should remove an attribute if value is set to undefined 4`] = `
 "<div></div>"
 `;
 
+exports[`kaiku > should render fragments next to other fragments 1`] = `
+"<div><span>Hello</span><span>world!</span><b>foo</b><i>bar</i></div>"
+`;
+
 exports[`kaiku > should render fragments perfectly 1`] = `
 "<span>Hello</span><span>world!</span>"
 `;

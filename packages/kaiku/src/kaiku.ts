@@ -923,7 +923,7 @@ const updateComponentInstance = <
     return
   }
 
-  instance.child = updateChild(
+  instance.child = reuseOrReplaceChild(
     childDescriptor,
     instance.parentElement_,
     instance.child
@@ -974,11 +974,11 @@ const createFragmentInstance = (
   return instance
 }
 
-const updateChild = (
+const reuseOrReplaceChild = (
   childDescriptor: NodeDescriptor<any>,
   parentElement: Element,
   existingChild: NodeInstance<any> | undefined
-) => {
+): NodeInstance<any> => {
   if (!existingChild) {
     return createNodeInstance(childDescriptor, parentElement)
   }
@@ -1028,7 +1028,7 @@ const updateNodeInstanceChildren = (
 
     nextkeys.add(key)
 
-    const child = updateChild(
+    const child = reuseOrReplaceChild(
       descriptor,
       parentElement,
       instance.childMap.get(key)
