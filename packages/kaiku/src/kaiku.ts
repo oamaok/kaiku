@@ -839,11 +839,8 @@ const updateNodeInstanceChildren = (
   instance: FragmentInstance | HtmlElementInstance,
   children: Child[]
 ) => {
-  const childDescriptors = children.map(childToDescriptor)
-
-  // NOTE: The fragment children are stored in reverse order to make
+  // NOTE: Children are stored in reverse order to make
   // DOM operations on them easier.
-
   instance.children_ = []
   const nextkeys = new Set<string | number>()
 
@@ -855,9 +852,8 @@ const updateNodeInstanceChildren = (
       ? instance.element_
       : instance.parentElement_
 
-  for (let i = childDescriptors.length - 1; i >= 0; i--) {
-    const descriptor = childDescriptors[i]
-    assert?.(descriptor)
+  for (let i = children.length - 1; i >= 0; i--) {
+    const descriptor = childToDescriptor(children[i])
 
     const descriptorKey = getKeyOfNodeDescriptor(descriptor)
     const key = descriptorKey === null ? i : descriptorKey
@@ -1435,6 +1431,7 @@ const mountNodeInstance = <
         mountNodeInstance(child, parentElement, nextSibling)
         nextSibling = child
       }
+
       break
     }
   }

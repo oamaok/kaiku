@@ -972,6 +972,50 @@ describe('kaiku', () => {
     }
   })
 
+  it('should handle reordering of children', async () => {
+    const state = createState({
+      items: Array(100)
+        .fill(null)
+        .map((_, i) => i.toString()),
+    })
+
+    const App = () => {
+      return (
+        <div>
+          {state.items.map((id) => (
+            <span key={id}>{id}</span>
+          ))}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+
+    {
+      const spanContents = [...document.querySelectorAll('span')].map(
+        (elem) => elem.innerHTML
+      )
+      expect(spanContents).toEqual(state.items)
+      expect(rootNode.innerHTML).toMatchSnapshot()
+    }
+
+    // Shuffle items
+    state.items = state.items.map((_, i) => {
+      const index = ((i + 13) * 13) % 100
+      return state.items[index]
+    })
+
+    await nextTick()
+
+    {
+      const spanContents = [...document.querySelectorAll('span')].map(
+        (elem) => elem.innerHTML
+      )
+      expect(spanContents).toEqual(state.items)
+      expect(rootNode.innerHTML).toMatchSnapshot()
+    }
+  })
+
   it('should handle multiple array children in different positions', () => {
     const App = () => (
       <>
