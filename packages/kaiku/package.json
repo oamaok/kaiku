@@ -18,7 +18,8 @@
     "jsx-runtime.js"
   ],
   "scripts": {
-    "typings": "tsc --project tsconfig.json",
+    "typings": "tsc",
+    "typecheck": "tsc --noEmit",
     "build": "rm -rf dist/ && node build.js",
     "test": "cd ../kaiku-test && pnpm test",
     "prettier": "prettier --write .",
@@ -26,11 +27,11 @@
     "prepublishOnly": "pnpm prettier:check && pnpm build && pnpm typings && pnpm test"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
-    "esbuild": "^0.12.29",
-    "prettier": "^2.8.8",
+    "cross-env": "7.0.3",
+    "esbuild": "0.12.29",
+    "prettier": "2.8.8",
     "terser": "^5.33.0",
     "tsx": "4.22.3",
-    "typescript": "^4.9.5"
+    "typescript": "6.0.3"
   }
 }

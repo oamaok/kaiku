@@ -14,7 +14,9 @@
     "build": "pnpm --filter ./packages/kaiku run build",
     "test": "pnpm --filter ./packages/kaiku-test run test",
     "format": "pnpm --filter './packages/**' run prettier",
-    "format:check": "pnpm --filter './packages/**' run prettier:check"
+    "format:check": "pnpm --filter './packages/**' run prettier:check",
+    "typings": "pnpm --filter ./packages/kaiku run typings",
+    "typecheck": "pnpm --filter './packages/**' run typecheck"
   },
   "workspaces": ["packages/kaiku", "packages/kaiku-test"]
 }

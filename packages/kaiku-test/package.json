@@ -16,16 +16,17 @@
     "test": "pnpm test:dev && pnpm test:prod",
     "update-snapshots": "pnpm tsx --test-update-snapshots ./src/kaiku.test.tsx",
     "prettier": "prettier --write .",
-    "prettier:check": "prettier --check ."
+    "prettier:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "kaiku": "workspace:../kaiku",
     "@types/jsdom": "28.0.3",
     "@types/node": "25.9.0",
-    "cross-env": "^7.0.3",
+    "cross-env": "7.0.3",
     "jsdom": "29.1.1",
-    "prettier": "^2.8.8",
+    "kaiku": "workspace:../kaiku",
+    "prettier": "2.8.8",
     "tsx": "4.22.3",
-    "typescript": "^4.9.5"
+    "typescript": "6.0.3"
   }
 }
