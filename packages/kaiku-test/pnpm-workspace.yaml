@@ -1,7 +1,0 @@
-allowBuilds:
-  esbuild: true
-
-minimumReleaseAge: 10000
-overrides:
-  kaiku: 'link:../kaiku'
-savePrefix: ''

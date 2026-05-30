@@ -1230,7 +1230,6 @@ const updateHtmlElementInstance = (
   nextProps: HtmlElementProperties,
   children: Child[]
 ) => {
-
   // Handle the style prop
   const properties = unionOfKeys(
     nextProps.style ??

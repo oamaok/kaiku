@@ -5,3 +5,7 @@ minimumReleaseAge: 10000
 overrides:
   kaiku: 'link:packages/kaiku'
 savePrefix: ''
+
+packages:
+ - packages/kaiku
+ - packages/kaiku-test
