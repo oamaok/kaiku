@@ -354,6 +354,10 @@ exports[`kaiku > should render recursive components 3`] = `
 "<div>I am the final child!</div>"
 `;
 
+exports[`kaiku > should support SVG as root element 1`] = `
+"<svg viewBox=\\"0 0 100 100\\" xmlns=\\"http://www.w3.org/2000/svg\\" xmlns:xlink=\\"http://www.w3.org/1999/xlink\\"><rect x=\\"13\\" y=\\"0\\" width=\\"46\\" height=\\"50\\"></rect></svg>"
+`;
+
 exports[`kaiku > should support fragments with keys 1`] = `
 "<div><div>0</div><div>1</div><div>2</div><div>3</div><div>4</div></div>"
 `;

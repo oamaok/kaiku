@@ -2067,6 +2067,21 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should support SVG as root element', async () => {
+    const App = () => (
+      <svg
+        viewBox="0 0 100 100"
+        xmlns="http://www.w3.org/2000/svg"
+        xmlns:xlink="http://www.w3.org/1999/xlink"
+      >
+        <rect x="13" y="0" width="46" height="50" />
+      </svg>
+    )
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should handle array of classnames including `undefined`', async () => {
     const App = () => {
       return <div class={[undefined]} />
