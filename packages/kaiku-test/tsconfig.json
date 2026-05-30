@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+
+    "strict": true,
+    "noImplicitAny": true,
+    "declaration": true,
+
+    // JSX settings used in tests
+    "jsx": "react-jsx",
+    "jsxImportSource": "kaiku",
+
+    "lib": ["DOM", "ESNext"],
+    "types": ["node"]
+  }
+}

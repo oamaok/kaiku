@@ -29,7 +29,6 @@ declare const EffectTag = 'EffectTag'
 declare const LazyPropUpdateTag = 'LazyPropUpdateTag'
 declare const LazyStyleUpdateTag = 'LazyStyleUpdateTag'
 
-const CLASS_COMPONENT_FLAG = Symbol()
 const IMMUTABLE_FLAG = Symbol()
 const STATE_FLAG = Symbol()
 const UNWRAP = Symbol()
@@ -100,49 +99,88 @@ type ClassComponentInstance<
   PropertiesT extends DefaultProps,
   StateT extends {} | undefined = undefined
 > = {
-  id_: DependeeId
   tag_: typeof ClassComponentTag
   hasMounted: boolean
-  instance: Component<PropertiesT, StateT>
-  props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: Element
+  props_: State<WithIntrinsicProps<PropertiesT>>
+  id_: DependeeId
+  instance: Component<PropertiesT, StateT>
   child?: NodeInstance<any>
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
 }
 
 type FunctionComponentInstance<PropertiesT extends DefaultProps> = {
-  id_: DependeeId
   tag_: typeof FunctionComponentTag
-  func: FunctionComponent<PropertiesT>
   hasMounted: boolean
-  props_: State<WithIntrinsicProps<PropertiesT>>
   parentElement_: Element
+  props_: State<WithIntrinsicProps<PropertiesT>>
+  id_: DependeeId
+  func: FunctionComponent<PropertiesT>
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
+
   child?: NodeInstance<any>
 }
 
 type FragmentInstance = {
   tag_: typeof FragmentTag
   hasMounted: boolean
-  props_: FragmentProperties
-  children_: NodeInstance<DefaultProps>[]
-  childMap: Map<string | number, NodeInstance<DefaultProps>>
   parentElement_: Element
+  props_: FragmentProperties
+
+  /**
+   * List of the fragment children. These are stored in a reverse order
+   * to make DOM manipulations on them easier.
+   */
+  children_: NodeInstance<DefaultProps>[]
+
+  /**
+   * Map of the children. Keyed by either `key` prop or the element index
+   * if key is not give.
+   */
+  childMap: Map<string | number, NodeInstance<DefaultProps>>
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
   nextSibling_?: NodeInstance<any>
 }
 
 type HtmlElementInstance = {
   tag_: typeof HtmlElementTag
-  tagName_: HtmlElementTagName
-  element_: HTMLElement | SVGElement
-  props_: HtmlElementProperties
   hasMounted: boolean
   parentElement_: Element
-  nextSibling_?: NodeInstance<any>
-  children_?: FragmentInstance
+  props_: HtmlElementProperties
+  tagName_: HtmlElementTagName
+  element_: HTMLElement | SVGElement
+
   lazyUpdates?: LazyUpdate<any>[]
   eventHandlers?: Record<string, (evt: Event) => void>
   eventListener?: (evt: Event) => void
+
+  /**
+   * List of the fragment children. These are stored in a reverse order
+   * to make DOM manipulations on them easier.
+   */
+  children_: NodeInstance<DefaultProps>[]
+
+  /**
+   * Map of the children. Keyed by either `key` prop or the element index
+   * if key is not give.
+   */
+  childMap: Map<string | number, NodeInstance<DefaultProps>>
+
+  /**
+   * Next sibling in the node hierarchy. Used to mount the DOM elements.
+   */
+  nextSibling_?: NodeInstance<any>
 }
 
 type TextInstance = {
@@ -168,7 +206,6 @@ abstract class Component<
   StateT extends {} | undefined = undefined
 > {
   props: PropertiesT = {} as PropertiesT
-  static [CLASS_COMPONENT_FLAG] = true
   state: StateT = undefined as StateT
   constructor(props: WithIntrinsicProps<PropertiesT>) {
     this.props = props
@@ -444,9 +481,7 @@ const internalCreateState = <T extends object>(
 
       if (trackedDependencyStack.length) {
         const dependencyKey = (id + getKeyId(key)) as StateKey
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
-          dependencyKey
-        )
+        trackedDependencyStack.at(-1)!.add(dependencyKey)
       }
 
       const value = target[key as keyof T]
@@ -475,9 +510,7 @@ const internalCreateState = <T extends object>(
 
     ownKeys(target) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
-          id as StateKey
-        )
+        trackedDependencyStack.at(-1)!.add(id as StateKey)
       }
 
       return Reflect.ownKeys(target)
@@ -485,9 +518,7 @@ const internalCreateState = <T extends object>(
 
     has(target, key) {
       if (trackedDependencyStack.length) {
-        trackedDependencyStack[trackedDependencyStack.length - 1]!.add(
-          id as StateKey
-        )
+        trackedDependencyStack.at(-1)!.add(id as StateKey)
       }
 
       return Reflect.has(target, key)
@@ -612,21 +643,6 @@ const stopHookTracking = () => {
   componentsThatHaveUpdatedAtLeastOnce.add(componentId)
 }
 
-const destroyHooks = (componentId: DependeeId) => {
-  componentsThatHaveUpdatedAtLeastOnce.delete(componentId)
-  componentStates.delete(componentId)
-
-  const componentEffects = effects.get(componentId)
-  if (componentEffects) {
-    for (const effect of componentEffects) {
-      removeDependencies(effect)
-      effect.unsubscribe_?.()
-    }
-
-    effects.delete(componentId)
-  }
-}
-
 const runEffect = (effect: Effect) => {
   effect.unsubscribe_?.()
   effect.unsubscribe_ = trackedExecute(effect, effect.fn) as
@@ -635,9 +651,7 @@ const runEffect = (effect: Effect) => {
 }
 
 const useEffect = (fn: () => void | (() => void)) => {
-  const componentId = componentIdStack[componentIdStack.length - 1] as
-    | DependeeId
-    | undefined
+  const componentId = componentIdStack.at(-1)! as DependeeId | undefined
 
   if (
     componentId !== undefined &&
@@ -671,7 +685,7 @@ const internalUseState = <T extends object>(
   initialState: T,
   shallow: boolean
 ): State<T> => {
-  const componentId = componentIdStack[componentIdStack.length - 1]
+  const componentId = componentIdStack.at(-1)!
   const componentStateIndex = componentStateIndexStack[
     componentStateIndexStack.length - 1
   ]!++
@@ -734,56 +748,77 @@ const reuseNodeInstance = (
   instance: NodeInstance<DefaultProps>,
   descriptor: NodeDescriptor<DefaultProps>
 ): boolean => {
-  const isSameFunctionComponent =
-    instance.tag_ === FunctionComponentTag &&
-    descriptor.tag_ === FunctionComponentTag &&
-    instance.func === descriptor.func
+  if (instance.tag_ !== descriptor.tag_) return false
 
-  const isSameClassComponent =
-    instance.tag_ === ClassComponentTag &&
-    descriptor.tag_ === ClassComponentTag &&
-    instance.instance instanceof descriptor.class_
+  switch (instance.tag_) {
+    case FunctionComponentTag:
+    case ClassComponentTag: {
+      assert?.(
+        descriptor.tag_ === FunctionComponentTag ||
+          descriptor.tag_ === ClassComponentTag
+      )
 
-  if (isSameFunctionComponent || isSameClassComponent) {
-    assert?.(
-      instance.tag_ === FunctionComponentTag ||
-        instance.tag_ === ClassComponentTag
-    )
-    assert?.(
-      descriptor.tag_ === FunctionComponentTag ||
-        descriptor.tag_ === ClassComponentTag
-    )
+      let hasSameBody: boolean
+      if (instance.tag_ === FunctionComponentTag) {
+        assert?.(descriptor.tag_ === FunctionComponentTag)
+        hasSameBody = instance.func === descriptor.func
+      } else {
+        assert?.(descriptor.tag_ === ClassComponentTag)
+        hasSameBody = instance.instance instanceof descriptor.class_
+      }
+      if (!hasSameBody) return false
 
-    const keys = unionOfKeys(descriptor.props_, instance.props_)
-    for (const key of keys) {
-      instance.props_[key] =
-        descriptor.props_[key as keyof typeof descriptor.props_]
+      const keys = unionOfKeys(descriptor.props_, instance.props_)
+      for (const key of keys) {
+        instance.props_[key] =
+          descriptor.props_[key as keyof typeof descriptor.props_]
+      }
+      return true
     }
-    return true
-  }
 
-  if (
-    instance.tag_ === HtmlElementTag &&
-    descriptor.tag_ === HtmlElementTag &&
-    instance.tagName_ === descriptor.tagName_
-  ) {
-    updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
-    return true
-  }
-
-  if (instance.tag_ === FragmentTag && descriptor.tag_ === FragmentTag) {
-    updateFragmentInstance(instance, descriptor.children_)
-    return true
-  }
-
-  if (instance.tag_ === TextNodeTag && descriptor.tag_ === TextNodeTag) {
-    if (instance.element_.data !== String(descriptor.value_)) {
-      instance.element_.data = descriptor.value_
+    case HtmlElementTag: {
+      assert?.(descriptor.tag_ === HtmlElementTag)
+      if (instance.tagName_ !== descriptor.tagName_) return false
+      updateHtmlElementInstance(
+        instance,
+        descriptor.props_,
+        descriptor.children_
+      )
+      updateNodeInstanceChildren(instance, descriptor.children_)
+      return true
     }
-    return true
+
+    case TextNodeTag: {
+      assert?.(descriptor.tag_ === TextNodeTag)
+      if (instance.element_.data !== String(descriptor.value_)) {
+        instance.element_.data = descriptor.value_
+      }
+      return true
+    }
+
+    case FragmentTag: {
+      assert?.(descriptor.tag_ === FragmentTag)
+      updateNodeInstanceChildren(instance, descriptor.children_)
+      return true
+    }
+  }
+}
+
+const reuseOrReplaceChild = (
+  childDescriptor: NodeDescriptor<any>,
+  parentElement: Element,
+  existingChild: NodeInstance<any> | undefined
+): NodeInstance<any> => {
+  if (!existingChild) {
+    return createNodeInstance(childDescriptor, parentElement)
   }
 
-  return false
+  const wasReused = reuseNodeInstance(existingChild, childDescriptor)
+  if (wasReused) return existingChild
+
+  unmountNodeInstance(existingChild)
+  const newChild = createNodeInstance(childDescriptor, parentElement)
+  return newChild
 }
 
 const getKeyOfNodeDescriptor = (
@@ -800,6 +835,57 @@ const getKeyOfNodeDescriptor = (
   return null
 }
 
+const updateNodeInstanceChildren = (
+  instance: FragmentInstance | HtmlElementInstance,
+  children: Child[]
+) => {
+  // NOTE: Children are stored in reverse order to make
+  // DOM operations on them easier.
+  instance.children_ = []
+  const nextkeys = new Set<string | number>()
+
+  // For fragments, the fragment's parent element will be the same
+  // for the children, as it is transparent in the DOM tree. For
+  // HTML elements, the element itself will be the children's parent.
+  const parentElement =
+    instance.tag_ === HtmlElementTag
+      ? instance.element_
+      : instance.parentElement_
+
+  for (let i = children.length - 1; i >= 0; i--) {
+    const descriptor = childToDescriptor(children[i])
+
+    const descriptorKey = getKeyOfNodeDescriptor(descriptor)
+    const key = descriptorKey === null ? i : descriptorKey
+
+    if (__DEBUG__) {
+      if (nextkeys.has(key)) {
+        throw new Error(
+          'Duplicate key detected! Make sure no two sibling elements have the same key.'
+        )
+      }
+    }
+
+    nextkeys.add(key)
+
+    const child = reuseOrReplaceChild(
+      descriptor,
+      parentElement,
+      instance.childMap.get(key)
+    )
+
+    instance.children_.push(child)
+    instance.childMap.set(key, child)
+  }
+
+  for (const [key, child] of instance.childMap) {
+    if (!nextkeys.has(key)) {
+      unmountNodeInstance(child)
+      instance.childMap.delete(key)
+    }
+  }
+}
+
 //
 //  Class components
 //
@@ -810,8 +896,8 @@ const createClassComponentDescriptor = <PropertiesT extends DefaultProps>(
   props_: WithIntrinsicProps<PropertiesT>
 ): ClassComponentDescriptor<PropertiesT> => ({
   tag_: ClassComponentTag,
-  class_,
   props_,
+  class_,
 })
 
 const createClassComponentInstance = <
@@ -833,12 +919,12 @@ const createClassComponentInstance = <
     classInstance.state = internalCreateState(classInstance.state, false) as any
   }
   const instance: ClassComponentInstance<PropertiesT, StateT> = {
-    id_: id,
     tag_: ClassComponentTag,
     hasMounted: false,
-    instance: classInstance,
     props_: internalCreateState(descriptor.props_, true),
     parentElement_: parentElement,
+    id_: id,
+    instance: classInstance,
   }
 
   updateComponentInstance(instance)
@@ -856,8 +942,8 @@ const createFunctionComponentDescriptor = <PropertiesT extends DefaultProps>(
   props_: WithIntrinsicProps<PropertiesT>
 ): FunctionComponentDescriptor<PropertiesT> => ({
   tag_: FunctionComponentTag,
-  func,
   props_,
+  func,
 })
 
 const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
@@ -865,12 +951,12 @@ const createFunctionComponentInstance = <PropertiesT extends DefaultProps>(
   parentElement: Element
 ): FunctionComponentInstance<PropertiesT> => {
   const instance: FunctionComponentInstance<PropertiesT> = {
-    id_: ++nextDependeeId as DependeeId,
     tag_: FunctionComponentTag,
     hasMounted: false,
-    func: descriptor.func,
     props_: internalCreateState(descriptor.props_, true),
     parentElement_: parentElement,
+    id_: ++nextDependeeId as DependeeId,
+    func: descriptor.func,
   }
 
   updateComponentInstance(instance)
@@ -905,23 +991,11 @@ const updateComponentInstance = <
     return
   }
 
-  if (!instance.child) {
-    instance.child = createNodeInstance(
-      childDescriptor,
-      instance.parentElement_
-    )
-  } else {
-    const wasReused = reuseNodeInstance(instance.child, childDescriptor)
-
-    if (!wasReused) {
-      unmountNodeInstance(instance.child)
-      const newChild = createNodeInstance(
-        childDescriptor,
-        instance.parentElement_
-      )
-      instance.child = newChild
-    }
-  }
+  instance.child = reuseOrReplaceChild(
+    childDescriptor,
+    instance.parentElement_,
+    instance.child
+  )
 
   if (instance.hasMounted) {
     mountNodeInstance(instance, instance.parentElement_, instance.nextSibling_)
@@ -933,9 +1007,11 @@ const updateComponentInstance = <
 //
 ///////////////
 
-const Fragment = __DEBUG__
-  ? () => assert(false, 'Fragment should not be called explicitly')
-  : () => {}
+const Fragment = (
+  __DEBUG__
+    ? () => assert(false, 'Fragment should not be called explicitly')
+    : () => null
+) as () => null
 
 const createFragmentDescriptor = (
   props_: FragmentProperties,
@@ -943,8 +1019,8 @@ const createFragmentDescriptor = (
 ): FragmentDescriptor => {
   return {
     tag_: FragmentTag,
-    children_: children,
     props_,
+    children_: children,
   }
 }
 
@@ -954,71 +1030,16 @@ const createFragmentInstance = (
 ): FragmentInstance => {
   const instance: FragmentInstance = {
     tag_: FragmentTag,
-    props_: descriptor.props_,
     hasMounted: false,
+    props_: descriptor.props_,
     parentElement_: parentElement,
     childMap: new Map(),
     children_: [],
   }
 
-  updateFragmentInstance(instance, descriptor.children_)
+  updateNodeInstanceChildren(instance, descriptor.children_)
 
   return instance
-}
-
-const updateFragmentInstance = (
-  instance: FragmentInstance,
-  children: Child[]
-) => {
-  const childDescriptors = children.map(childToDescriptor)
-
-  // NOTE: The fragment children are stored in reverse order to make
-  // DOM operations on them easier.
-
-  instance.children_ = []
-  const nextkeys = new Set<string | number>()
-
-  for (let i = childDescriptors.length - 1; i >= 0; i--) {
-    const descriptor = childDescriptors[i]
-    assert?.(descriptor)
-
-    const descriptorKey = getKeyOfNodeDescriptor(descriptor)
-    const key = descriptorKey === null ? i : descriptorKey
-
-    if (__DEBUG__) {
-      if (nextkeys.has(key)) {
-        throw new Error(
-          'Duplicate key detected! Make sure no two sibling elements have the same key.'
-        )
-      }
-    }
-
-    nextkeys.add(key)
-
-    const existingChild = instance.childMap.get(key)
-    const wasReused =
-      existingChild && reuseNodeInstance(existingChild, descriptor)
-
-    if (wasReused) {
-      assert?.(existingChild)
-      instance.children_.push(existingChild)
-    } else {
-      if (existingChild) {
-        unmountNodeInstance(existingChild)
-      }
-
-      const node = createNodeInstance(descriptor, instance.parentElement_)
-      instance.children_.push(node)
-      instance.childMap.set(key, node)
-    }
-  }
-
-  for (const [key, child] of instance.childMap) {
-    if (!nextkeys.has(key)) {
-      unmountNodeInstance(child)
-      instance.childMap.delete(key)
-    }
-  }
 }
 
 //
@@ -1032,9 +1053,9 @@ const createTextInstance = (
 ): TextInstance => {
   return {
     tag_: TextNodeTag,
-    element_: document.createTextNode(descriptor.value_),
     hasMounted: false,
     parentElement_: parentElement,
+    element_: document.createTextNode(descriptor.value_),
   }
 }
 
@@ -1114,28 +1135,23 @@ const registerLazyUpdate = <T>(
 ) => {
   instance.lazyUpdates ??= []
 
-  let lazyUpdate: LazyUpdate<T> | undefined
-  for (const existingUpdate of instance.lazyUpdates) {
-    if (existingUpdate.tag_ === type && existingUpdate.property === property) {
-      lazyUpdate = existingUpdate
-      break
+  for (const lazyUpdate of instance.lazyUpdates) {
+    if (lazyUpdate.tag_ === type && lazyUpdate.property === property) {
+      lazyUpdate.callback = callback
+      runLazyUpdate(lazyUpdate)
+      return
     }
   }
 
-  if (lazyUpdate) {
-    lazyUpdate.callback = callback
-  } else {
-    lazyUpdate = {
-      id_: ++nextDependeeId as DependeeId,
-      tag_: type,
-      element_: instance.element_,
-      property,
-      callback,
-      previousValue: undefined,
-    }
-    instance.lazyUpdates.push(lazyUpdate)
+  const lazyUpdate = {
+    id_: ++nextDependeeId as DependeeId,
+    tag_: type,
+    element_: instance.element_,
+    property,
+    callback,
+    previousValue: undefined,
   }
-
+  instance.lazyUpdates.push(lazyUpdate)
   runLazyUpdate(lazyUpdate)
 }
 
@@ -1194,14 +1210,17 @@ const createHtmlElementInstance = (
 
   const instance: HtmlElementInstance = {
     tag_: HtmlElementTag,
-    tagName_: descriptor.tagName_,
     hasMounted: false,
+    props_: EMPTY_OBJECT,
+    tagName_: descriptor.tagName_,
     element_,
     parentElement_: parentElement,
-    props_: EMPTY_OBJECT,
+    children_: [],
+    childMap: new Map(),
   }
 
   updateHtmlElementInstance(instance, descriptor.props_, descriptor.children_)
+  updateNodeInstanceChildren(instance, descriptor.children_)
 
   return instance
 }
@@ -1211,8 +1230,6 @@ const updateHtmlElementInstance = (
   nextProps: HtmlElementProperties,
   children: Child[]
 ) => {
-  const keys = unionOfKeys(nextProps, instance.props_)
-
   // Handle the style prop
   const properties = unionOfKeys(
     nextProps.style ??
@@ -1235,6 +1252,8 @@ const updateHtmlElementInstance = (
   }
 
   // Handle properties other than `style`
+  const keys = unionOfKeys(nextProps, instance.props_)
+
   for (const key of keys) {
     if (key === 'style') continue
     if (key === 'key') continue
@@ -1249,8 +1268,7 @@ const updateHtmlElementInstance = (
       continue
     }
 
-    // Probably faster than calling startsWith...
-    const isListener = key[0] === 'o' && key[1] === 'n'
+    const isListener = key.startsWith('on')
 
     if (isListener) {
       const eventName = key.substring(2).toLowerCase()
@@ -1298,26 +1316,6 @@ const updateHtmlElementInstance = (
   }
 
   instance.props_ = nextProps
-
-  if (children.length === 0) {
-    if (instance.children_) {
-      unmountNodeInstance(instance.children_)
-    }
-
-    delete instance.children_
-  } else {
-    if (instance.children_) {
-      reuseNodeInstance(
-        instance.children_,
-        createFragmentDescriptor(EMPTY_OBJECT, children)
-      )
-    } else {
-      instance.children_ = createFragmentInstance(
-        createFragmentDescriptor(EMPTY_OBJECT, children),
-        instance.element_
-      )
-    }
-  }
 }
 
 //
@@ -1365,9 +1363,7 @@ const getNextSiblingElement = (
 
     case FragmentTag: {
       if (instance.children_.length !== 0) {
-        return getNextSiblingElement(
-          instance.children_[instance.children_.length - 1]!
-        )
+        return getNextSiblingElement(instance.children_.at(-1)!)
       }
 
       if (instance.nextSibling_) {
@@ -1408,8 +1404,12 @@ const mountNodeInstance = <
 
     case HtmlElementTag:
     case TextNodeTag: {
-      if (instance.tag_ === HtmlElementTag && instance.children_) {
-        mountNodeInstance(instance.children_, instance.element_)
+      if (instance.tag_ === HtmlElementTag) {
+        let childNextSibling: NodeInstance<any> | undefined
+        for (const child of instance.children_) {
+          mountNodeInstance(child, instance.element_, childNextSibling)
+          childNextSibling = child
+        }
       }
 
       if (instance.hasMounted && instance.nextSibling_ === nextSibling) {
@@ -1430,6 +1430,7 @@ const mountNodeInstance = <
         mountNodeInstance(child, parentElement, nextSibling)
         nextSibling = child
       }
+
       break
     }
   }
@@ -1441,7 +1442,22 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
   switch (instance.tag_) {
     case FunctionComponentTag:
     case ClassComponentTag: {
-      destroyHooks(instance.id_)
+      {
+        // Destroy hooks
+        componentsThatHaveUpdatedAtLeastOnce.delete(instance.id_)
+        componentStates.delete(instance.id_)
+
+        const componentEffects = effects.get(instance.id_)
+        if (componentEffects) {
+          for (const effect of componentEffects) {
+            removeDependencies(effect)
+            effect.unsubscribe_?.()
+          }
+
+          effects.delete(instance.id_)
+        }
+      }
+
       removeDependencies(instance)
       if (instance.tag_ === ClassComponentTag) {
         instance.instance.componentWillUnmount()
@@ -1449,6 +1465,12 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
       if (instance.child) {
         unmountNodeInstance(instance.child)
       }
+      break
+    }
+
+    case TextNodeTag: {
+      assert?.(instance.parentElement_)
+      instance.parentElement_.removeChild(instance.element_)
       break
     }
 
@@ -1460,16 +1482,9 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
       instance.lazyUpdates?.forEach(removeDependencies)
       assert?.(instance.parentElement_)
       instance.parentElement_.removeChild(instance.element_)
-      if (instance.children_) {
-        instance.children_.children_.forEach(unmountNodeInstance)
-      }
-      break
-    }
 
-    case TextNodeTag: {
-      assert?.(instance.parentElement_)
-      instance.parentElement_.removeChild(instance.element_)
-      break
+      // NOTE: Intentional case leakage. Unmounting for children
+      // is identical for element instances and fragment instances.
     }
 
     case FragmentTag: {
@@ -1517,10 +1532,10 @@ function h(
     )
   }
 
-  if (type[CLASS_COMPONENT_FLAG] as boolean) {
+  if (Object.getPrototypeOf(type) === Component) {
     return createClassComponentDescriptor(type, {
       ...(props ?? EMPTY_OBJECT),
-      children: children.length === 0 ? undefined : children,
+      children,
     })
   }
 
@@ -1530,7 +1545,7 @@ function h(
 
   return createFunctionComponentDescriptor(type, {
     ...(props ?? EMPTY_OBJECT),
-    children: children.length === 0 ? undefined : children,
+    children,
   })
 }
 
@@ -1541,56 +1556,29 @@ function jsx(
 ): HtmlElementDescriptor
 function jsx<PropertiesT extends DefaultProps>(
   type: FunctionComponent<PropertiesT>,
-  props: PropertiesT | null,
+  props: PropertiesT,
   key?: string
 ): FunctionComponentDescriptor<PropertiesT>
 function jsx<PropertiesT extends DefaultProps>(
   type: ClassComponent<PropertiesT>,
-  props: PropertiesT | null,
+  props: PropertiesT,
   key?: string
 ): ClassComponentDescriptor<PropertiesT>
 function jsx(
   type: typeof Fragment,
-  props: null | { key?: string | number },
+  props: { key?: string | number },
   key?: string
 ): FragmentDescriptor
 function jsx(
   type: any,
-  props: DefaultProps | HtmlElementProperties | null,
+  props: DefaultProps | HtmlElementProperties,
   key?: string
 ): NodeDescriptor<any> {
-  let children = props?.children
-  children =
-    children !== undefined
-      ? Array.isArray(children)
-        ? children
-        : [children]
-      : undefined
-  const propsCopy: Record<string, any> = {
-    ...props,
-    children,
-    key,
-  }
-
-  if (typeof type === 'string') {
-    delete propsCopy.children
-    return createHtmlElementDescriptor(
-      type as HtmlElementTagName,
-      propsCopy,
-      children ?? []
-    )
-  }
-
-  if (type[CLASS_COMPONENT_FLAG] as boolean) {
-    return createClassComponentDescriptor(type, propsCopy)
-  }
-
-  if (type === Fragment) {
-    delete propsCopy.children
-    return createFragmentDescriptor(propsCopy, children ?? [])
-  }
-
-  return createFunctionComponentDescriptor(type, propsCopy)
+  let { children, ...restProps } = props
+  restProps.key = key
+  return children === undefined
+    ? h(type, restProps)
+    : h(type, restProps, ...(Array.isArray(children) ? children : [children]))
 }
 
 const render: Render = <PropertiesT extends DefaultProps>(

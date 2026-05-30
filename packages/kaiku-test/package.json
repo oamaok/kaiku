@@ -1,0 +1,32 @@
+{
+  "private": "true",
+  "name": "kaiku-test",
+  "version": "0.0.0",
+  "description": "Tests for Kaiku",
+  "license": "MIT",
+  "author": "Teemu Pääkkönen",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oamaok/kaiku.git"
+  },
+  "scripts": {
+    "test:dev": "NODE_ENV=development pnpm tsx --test ./src/kaiku.test.tsx",
+    "test:prod": "NODE_ENV=production pnpm tsx --test ./src/kaiku.test.tsx",
+    "test": "pnpm test:dev && pnpm test:prod",
+    "update-snapshots": "pnpm tsx --test-update-snapshots ./src/kaiku.test.tsx",
+    "prettier": "prettier --write .",
+    "prettier:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jsdom": "28.0.3",
+    "@types/node": "25.9.0",
+    "cross-env": "7.0.3",
+    "jsdom": "29.1.1",
+    "kaiku": "workspace:../kaiku",
+    "prettier": "2.8.8",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3"
+  }
+}

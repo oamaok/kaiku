@@ -1,33 +1,5 @@
-import * as kaiku from '../src/kaiku'
-
-const isDevVersion = process.env.KAIKU_VERSION === 'development'
-
-const getKaiku = () => {
-  switch (process.env.KAIKU_VERSION) {
-    case 'minified':
-      return require('../dist/kaiku.min.js')
-    case 'development':
-      return require('../dist/kaiku.dev.js')
-    default:
-      throw new Error('Invalid KAIKU_VERSION')
-  }
-}
-
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
-const getStack = () => {
-  try {
-    throw new Error()
-  } catch (err) {
-    return (err as any).stack
-      .split('\n')
-      .map((v: string) => v.trim())
-      .slice(2)
-  }
-}
-
-const {
+import { mockFn, describe, it, expect, beforeEach } from './lib'
+import {
   h,
   Fragment,
   render,
@@ -39,19 +11,10 @@ const {
   useRef,
   Component,
   immutable,
-} = getKaiku() as {
-  h: typeof kaiku.h
-  Fragment: typeof kaiku.Fragment
-  Component: typeof kaiku.Component
-  render: typeof kaiku.render
-  createState: typeof kaiku.createState
-  createShallowState: typeof kaiku.createShallowState
-  useEffect: typeof kaiku.useEffect
-  useState: typeof kaiku.useState
-  useShallowState: typeof kaiku.useShallowState
-  useRef: typeof kaiku.useRef
-  immutable: typeof kaiku.immutable
-}
+  FC,
+} from 'kaiku'
+
+const isDevVersion = process.env.NODE_ENV === 'development'
 
 const nextTick = () => new Promise(process.nextTick)
 
@@ -70,16 +33,6 @@ beforeEach(() => {
   })
 })
 
-const domManipulations = {
-  addEventListener: jest.spyOn(Element.prototype, 'addEventListener'),
-  removeEventListener: jest.spyOn(Element.prototype, 'removeEventListener'),
-  createElement: jest.spyOn(document, 'createElement'),
-}
-
-beforeEach(() => {
-  jest.clearAllMocks()
-})
-
 describe('kaiku', () => {
   it('should handle state with null values', () => {
     const state = createState({ foo: null })
@@ -87,13 +40,12 @@ describe('kaiku', () => {
 
   it('should render a span to body', async () => {
     const App = () => <span id="test">Hello world!</span>
-
     render(<App />, rootNode)
 
     const span = document.getElementById('test')
 
     expect(span).toBeDefined()
-    expect(span?.innerHTML).toBe('Hello world!')
+    expect(span?.innerHTML).toEqual('Hello world!')
   })
 
   it('should update a simple counter', async () => {
@@ -119,13 +71,13 @@ describe('kaiku', () => {
     const displayElem = document.querySelector('#display')
     const buttonElem = document.querySelector('button')
 
-    expect(displayElem!.innerHTML).toBe('The counter is at 0')
+    expect(displayElem!.innerHTML).toEqual('The counter is at 0')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     buttonElem!.click()
     await nextTick()
 
-    expect(displayElem!.innerHTML).toBe('The counter is at 1')
+    expect(displayElem!.innerHTML).toEqual('The counter is at 1')
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
@@ -145,25 +97,25 @@ describe('kaiku', () => {
     const displayElem = document.querySelector('span')
     const buttonElem = document.querySelector('button')
 
-    expect(displayElem!.innerHTML).toBe('The counter is at 0')
+    expect(displayElem!.innerHTML).toEqual('The counter is at 0')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     buttonElem!.click()
     await nextTick()
 
-    expect(displayElem!.innerHTML).toBe('The counter is at 1')
+    expect(displayElem!.innerHTML).toEqual('The counter is at 1')
     expect(rootNode.innerHTML).toMatchSnapshot()
 
     buttonElem!.click()
     await nextTick()
 
-    expect(displayElem!.innerHTML).toBe('The counter is at 2')
+    expect(displayElem!.innerHTML).toEqual('The counter is at 2')
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
   it('should only update dependant attributes without re-render', async () => {
-    const propUpdateCounter = jest.fn()
-    const reRenderCounter = jest.fn()
+    const propUpdateCounter = mockFn()
+    const reRenderCounter = mockFn()
 
     const state = createState({ name: 'foo' })
 
@@ -187,14 +139,14 @@ describe('kaiku', () => {
 
     expect(propUpdateCounter).toHaveBeenCalledTimes(1)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
-    expect(element!.getAttribute('name')).toBe('foo')
+    expect(element!.getAttribute('name')).toEqual('foo')
 
     state.name = 'bar'
     await nextTick()
 
     expect(propUpdateCounter).toHaveBeenCalledTimes(2)
     expect(reRenderCounter).toHaveBeenCalledTimes(1)
-    expect(element!.getAttribute('name')).toBe('bar')
+    expect(element!.getAttribute('name')).toEqual('bar')
   })
 
   it('should support multiple render roots', async () => {
@@ -203,8 +155,8 @@ describe('kaiku', () => {
       forSecond: { foo: 'yes' },
     })
 
-    const firstAppRenderCounter = jest.fn()
-    const secondAppRenderCounter = jest.fn()
+    const firstAppRenderCounter = mockFn()
+    const secondAppRenderCounter = mockFn()
 
     const FirstApp = () => {
       firstAppRenderCounter()
@@ -221,37 +173,37 @@ describe('kaiku', () => {
     const span1 = document.getElementById('test1')
     const span2 = document.getElementById('test2')
 
-    expect(span1!.innerHTML).toBe('yes')
-    expect(span2!.innerHTML).toBe('yes')
+    expect(span1!.innerHTML).toEqual('yes')
+    expect(span2!.innerHTML).toEqual('yes')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(1)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
 
     state.forFirst.foo = 'no'
     await nextTick()
-    expect(span1!.innerHTML).toBe('no')
-    expect(span2!.innerHTML).toBe('yes')
+    expect(span1!.innerHTML).toEqual('no')
+    expect(span2!.innerHTML).toEqual('yes')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(1)
 
     state.forSecond.foo = 'maybe'
     await nextTick()
-    expect(span1!.innerHTML).toBe('no')
-    expect(span2!.innerHTML).toBe('maybe')
+    expect(span1!.innerHTML).toEqual('no')
+    expect(span2!.innerHTML).toEqual('maybe')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(2)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(2)
 
     state.forFirst = { foo: 'totally different' }
     state.forSecond = { foo: 'bruhaha' }
     await nextTick()
-    expect(span1!.innerHTML).toBe('totally different')
-    expect(span2!.innerHTML).toBe('bruhaha')
+    expect(span1!.innerHTML).toEqual('totally different')
+    expect(span2!.innerHTML).toEqual('bruhaha')
     expect(firstAppRenderCounter).toHaveBeenCalledTimes(3)
     expect(secondAppRenderCounter).toHaveBeenCalledTimes(3)
   })
 
   it('should properly call unsubcribe function of an effect if returned', async () => {
-    const effectCallCounter = jest.fn()
-    const effectUnsubscribeCallCounter = jest.fn()
+    const effectCallCounter = mockFn()
+    const effectUnsubscribeCallCounter = mockFn()
 
     const state = createState({ a: 0 })
 
@@ -292,7 +244,7 @@ describe('kaiku', () => {
       obj: { a: true },
     })
 
-    const cleanupFunctionCallCounter = jest.fn()
+    const cleanupFunctionCallCounter = mockFn()
 
     const Child = () => {
       useEffect(() => {
@@ -317,7 +269,7 @@ describe('kaiku', () => {
   })
 
   it('should fire useEffect hooks properly', async () => {
-    const effectCallCounter = jest.fn()
+    const effectCallCounter = mockFn()
 
     const state = createState({
       a: 0,
@@ -383,8 +335,8 @@ describe('kaiku', () => {
   })
 
   it('should fire useEffect hooks properly when called outside a component', async () => {
-    const externalEffectCallTracker = jest.fn()
-    const externalCleanupCallTracker = jest.fn()
+    const externalEffectCallTracker = mockFn()
+    const externalCleanupCallTracker = mockFn()
 
     const state = createState({
       a: 0,
@@ -411,8 +363,8 @@ describe('kaiku', () => {
   })
 
   it('should handle updates in an array efficiently', async () => {
-    const listRenderCounter = jest.fn()
-    const itemRenderCounter = jest.fn()
+    const listRenderCounter = mockFn()
+    const itemRenderCounter = mockFn()
 
     const state = createState({
       list: Array(10)
@@ -490,8 +442,8 @@ describe('kaiku', () => {
   })
 
   it('should handle updates in an array within a lazy child efficiently', async () => {
-    const listRenderCounter = jest.fn()
-    const itemRenderCounter = jest.fn()
+    const listRenderCounter = mockFn()
+    const itemRenderCounter = mockFn()
 
     const state = createState({
       list: Array(10)
@@ -566,9 +518,9 @@ describe('kaiku', () => {
   })
 
   it('should only run effect dependant of a prop if the component body does not depend on it', async () => {
-    const componentRenderCounter = jest.fn()
-    const effectCallCounter = jest.fn()
-    const appRenderCounter = jest.fn()
+    const componentRenderCounter = mockFn()
+    const effectCallCounter = mockFn()
+    const appRenderCounter = mockFn()
 
     const state = createState({ value: 'foo' })
 
@@ -617,9 +569,9 @@ describe('kaiku', () => {
   })
 
   it("should only update lazy prop within a component if only the lazy prop is dependant on the component's prop", async () => {
-    const componentRenderCounter = jest.fn()
-    const propCallCounter = jest.fn()
-    const appRenderCounter = jest.fn()
+    const componentRenderCounter = mockFn()
+    const propCallCounter = mockFn()
+    const appRenderCounter = mockFn()
 
     const state = createState({ value: 'foo' })
 
@@ -673,9 +625,9 @@ describe('kaiku', () => {
   })
 
   it('should not confuse lazy HTML property updates and style properties of the same name', async () => {
-    const htmlPropCallCounter = jest.fn()
-    const stylePropCallCounter = jest.fn()
-    const appRenderCounter = jest.fn()
+    const htmlPropCallCounter = mockFn()
+    const stylePropCallCounter = mockFn()
+    const appRenderCounter = mockFn()
 
     const state = createState({ htmlWidth: 1, styleWidth: 1 })
 
@@ -741,9 +693,9 @@ describe('kaiku', () => {
   })
 
   it('should update lazy props efficiently', async () => {
-    const listRenderCounter = jest.fn()
-    const itemRenderCounter = jest.fn()
-    const propUpdateCounter = jest.fn()
+    const listRenderCounter = mockFn()
+    const itemRenderCounter = mockFn()
+    const propUpdateCounter = mockFn()
 
     const state = createState({
       list: Array(10)
@@ -808,8 +760,8 @@ describe('kaiku', () => {
   })
 
   it('should not refire previous lazy props if component re-renders', async () => {
-    const lazyCallCounter = jest.fn()
-    const componentRenderCounter = jest.fn()
+    const lazyCallCounter = mockFn()
+    const componentRenderCounter = mockFn()
 
     const state = createState({ a: 0, b: 0 })
 
@@ -871,6 +823,33 @@ describe('kaiku', () => {
     expect(rootNode.innerHTML).toMatchSnapshot()
   })
 
+  it('should render recursive components', async () => {
+    const state = createState({ amount: 100 })
+
+    const RecursiveComponent = ({ n }: any) => {
+      if (n === 0) {
+        return <div>I am the final child!</div>
+      }
+
+      return <RecursiveComponent n={n - 1} />
+    }
+
+    const App = () => {
+      return <RecursiveComponent n={100} />
+    }
+
+    render(<App />, rootNode)
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.amount = 150
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+
+    state.amount = 50
+    await nextTick()
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
   it('should support conditional classNames', async () => {
     const state = createState({ foo: false })
 
@@ -884,11 +863,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element!.className).toBe('always-here')
+    expect(element!.className).toEqual('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element!.className).toBe('always-here sometimes-here')
+    expect(element!.className).toEqual('always-here sometimes-here')
   })
 
   it('should support lazy conditional classNames', async () => {
@@ -904,11 +883,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element!.className).toBe('always-here')
+    expect(element!.className).toEqual('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element!.className).toBe('always-here sometimes-here')
+    expect(element!.className).toEqual('always-here sometimes-here')
   })
 
   it('should support multiple conditional classNames', async () => {
@@ -928,11 +907,11 @@ describe('kaiku', () => {
     render(<App />, rootNode)
 
     const element = document.querySelector('#test')
-    expect(element!.className).toBe('always-here')
+    expect(element!.className).toEqual('always-here')
 
     state.foo = true
     await nextTick()
-    expect(element!.className).toBe(
+    expect(element!.className).toEqual(
       'always-here sometimes-here also-here you-didnt-expect-me-to-be-here'
     )
   })
@@ -990,6 +969,50 @@ describe('kaiku', () => {
       expect(document.querySelector('#app')!.innerHTML).toEqual(
         state.a ? 'text' : '<b>bold text</b>'
       )
+    }
+  })
+
+  it('should handle reordering of children', async () => {
+    const state = createState({
+      items: Array(100)
+        .fill(null)
+        .map((_, i) => i.toString()),
+    })
+
+    const App = () => {
+      return (
+        <div>
+          {state.items.map((id) => (
+            <span key={id}>{id}</span>
+          ))}
+        </div>
+      )
+    }
+
+    render(<App />, rootNode)
+
+    {
+      const spanContents = [...document.querySelectorAll('span')].map(
+        (elem) => elem.innerHTML
+      )
+      expect(spanContents).toEqual(state.items)
+      expect(rootNode.innerHTML).toMatchSnapshot()
+    }
+
+    // Shuffle items
+    state.items = state.items.map((_, i) => {
+      const index = ((i + 13) * 13) % 100
+      return state.items[index]
+    })
+
+    await nextTick()
+
+    {
+      const spanContents = [...document.querySelectorAll('span')].map(
+        (elem) => elem.innerHTML
+      )
+      expect(spanContents).toEqual(state.items)
+      expect(rootNode.innerHTML).toMatchSnapshot()
     }
   })
 
@@ -1052,9 +1075,9 @@ describe('kaiku', () => {
   })
 
   it('should handle lazy children efficiently', async () => {
-    const componentRenderCounter = jest.fn()
-    const lazyDivCallCounter = jest.fn()
-    const lazySpanCallCounter = jest.fn()
+    const componentRenderCounter = mockFn()
+    const lazyDivCallCounter = mockFn()
+    const lazySpanCallCounter = mockFn()
 
     const state = createState({ div: 0, span: 0 })
 
@@ -1113,9 +1136,9 @@ describe('kaiku', () => {
   })
 
   it('should handle refs and related effect calls', async () => {
-    const firstEffectCall = jest.fn()
-    const secondEffectCall = jest.fn()
-    const thirdEffectCall = jest.fn()
+    const firstEffectCall = mockFn()
+    const secondEffectCall = mockFn()
+    const thirdEffectCall = mockFn()
 
     const state = createState({ value: 'second' })
 
@@ -1208,7 +1231,7 @@ describe('kaiku', () => {
 
   it('should call componentDidMount only once', async () => {
     const state = createState({ ticker: 0 })
-    const componentDidMountCall = jest.fn()
+    const componentDidMountCall = mockFn()
 
     class App extends Component {
       ref: any = {}
@@ -1232,11 +1255,29 @@ describe('kaiku', () => {
     expect(componentDidMountCall).toHaveBeenCalledTimes(1)
   })
 
+  it('should call componentDidMount even if the component renders nothing', async () => {
+    const componentDidMountCall = mockFn()
+
+    class App extends Component {
+      componentDidMount() {
+        componentDidMountCall()
+      }
+
+      render() {
+        return null
+      }
+    }
+
+    render(<App />, rootNode)
+
+    expect(componentDidMountCall).toHaveBeenCalledTimes(1)
+  })
+
   it('should call componentWillUnmount', async () => {
     const state = createState({ ticker: 0 })
 
-    const componentDidMountCall = jest.fn()
-    const componentWillUnmountCall = jest.fn()
+    const componentDidMountCall = mockFn()
+    const componentWillUnmountCall = mockFn()
 
     class ClassComponent extends Component {
       componentDidMount() {
@@ -1274,6 +1315,25 @@ describe('kaiku', () => {
         <span>Hello</span>
         <span>world!</span>
       </>
+    )
+
+    render(<App />, rootNode)
+
+    expect(rootNode.innerHTML).toMatchSnapshot()
+  })
+
+  it('should render fragments next to other fragments', async () => {
+    const App = () => (
+      <div>
+        <>
+          <span>Hello</span>
+          <span>world!</span>
+        </>
+        <>
+          <b>foo</b>
+          <i>bar</i>
+        </>
+      </div>
     )
 
     render(<App />, rootNode)
@@ -1403,7 +1463,7 @@ describe('kaiku', () => {
       obj: { a: undefined as undefined | string },
     })
 
-    const reRenderCounter = jest.fn()
+    const reRenderCounter = mockFn()
 
     const App = () => {
       reRenderCounter()
@@ -1436,7 +1496,7 @@ describe('kaiku', () => {
       },
     })
 
-    const bValueTracker = jest.fn()
+    const bValueTracker = mockFn()
 
     const App = () => {
       // Do we actually want to be creating new bound functions every time this is evaluated?
@@ -1452,8 +1512,8 @@ describe('kaiku', () => {
   })
 
   it('should re-run dependent effects if one effect updates the dependency', async () => {
-    const firstEffectCounter = jest.fn()
-    const secondEffectCounter = jest.fn()
+    const firstEffectCounter = mockFn()
+    const secondEffectCounter = mockFn()
 
     const state = createState({
       a: 0,
@@ -1576,16 +1636,16 @@ describe('kaiku', () => {
 
     render(<App />, rootNode)
     const inputElem = document.querySelector('input')
-    expect(inputElem!.value).toBe('')
+    expect(inputElem!.value).toEqual('')
 
     state.inputValue = 'foobar'
     await nextTick()
-    expect(inputElem!.value).toBe('foobar')
+    expect(inputElem!.value).toEqual('foobar')
   })
 
   it('should not run effects of unmounted components', async () => {
-    const effectCounter = jest.fn()
-    const unsubCounter = jest.fn()
+    const effectCounter = mockFn()
+    const unsubCounter = mockFn()
     const state = createState({
       isCompMounted: true,
       counter: 0,
@@ -1625,7 +1685,7 @@ describe('kaiku', () => {
   })
 
   it('should set `ref.current` to `undefined` once HTML element unmounts', async () => {
-    const effectCounter = jest.fn()
+    const effectCounter = mockFn()
     const state = createState({ isDivMounted: false })
 
     const App = () => {
@@ -1662,7 +1722,7 @@ describe('kaiku', () => {
   })
 
   it('should set `ref.current` to `undefined` if element is re-used but not unmounted', async () => {
-    const effectCounter = jest.fn()
+    const effectCounter = mockFn()
     const state = createState({ isRef: false })
 
     const App = () => {
@@ -1701,8 +1761,8 @@ describe('kaiku', () => {
   })
 
   it('should handle changes in element event handlers', async () => {
-    const handlerA = jest.fn()
-    const handlerB = jest.fn()
+    const handlerA = mockFn()
+    const handlerB = mockFn()
     const state = createState({ handler: 'a' })
 
     const App = () => {
@@ -1730,7 +1790,7 @@ describe('kaiku', () => {
     expect(handlerA).toHaveBeenCalledTimes(1)
     expect(handlerB).toHaveBeenCalledTimes(1)
 
-    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
+    expect.dom.addEventListener.toHaveBeenCalledTimes(1)
   })
 
   it('should remove event listener if handler is set to falsey value', async () => {
@@ -1743,14 +1803,14 @@ describe('kaiku', () => {
     }
 
     render(<App />, rootNode)
-    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
-    expect(domManipulations.removeEventListener).toHaveBeenCalledTimes(0)
+    expect.dom.addEventListener.toHaveBeenCalledTimes(1)
+    expect.dom.removeEventListener.toHaveBeenCalledTimes(0)
 
     state.hasHandler = false
     await nextTick()
 
-    expect(domManipulations.addEventListener).toHaveBeenCalledTimes(1)
-    expect(domManipulations.removeEventListener).toHaveBeenCalledTimes(1)
+    expect.dom.addEventListener.toHaveBeenCalledTimes(1)
+    expect.dom.removeEventListener.toHaveBeenCalledTimes(1)
   })
 
   it('should unmount children of DOM elements', async () => {
@@ -1817,7 +1877,7 @@ describe('kaiku', () => {
   })
 
   it('should not call lazy prop updates after element has unmounted', async () => {
-    const propCallCounter = jest.fn()
+    const propCallCounter = mockFn()
 
     const state = createState({ isMounted: true, counter: 0 })
     const App = () => {
@@ -1933,17 +1993,16 @@ describe('kaiku', () => {
         )
       }
 
-      expect(() =>
-        render(<App />, rootNode)
-      ).toThrowErrorMatchingInlineSnapshot(
-        `"Duplicate key detected! Make sure no two sibling elements have the same key."`
-      )
+      expect(() => render(<App />, rootNode)).toThrow({
+        message:
+          'Duplicate key detected! Make sure no two sibling elements have the same key.',
+      })
     }
   )
 
   it('should execute effects if another effect modifies dependency', async () => {
-    const effectCounterA = jest.fn()
-    const effectCounterB = jest.fn()
+    const effectCounterA = mockFn()
+    const effectCounterB = mockFn()
 
     const state = createState({ run: false, a: 0, b: 0 })
 
@@ -2156,6 +2215,7 @@ describe('kaiku', () => {
       { id: 1, name: 'bar' },
     ])
   })
+
   it('should re-use component within array of keyed fragments', async () => {
     let nextId = 0
     const getNextId = () => nextId++
@@ -2173,7 +2233,7 @@ describe('kaiku', () => {
       return <div>Hello, my name is {name}</div>
     }
 
-    const Wrapper: kaiku.FC<{}> = ({ children }) => {
+    const Wrapper: FC<{}> = ({ children }) => {
       return <main>{children}</main>
     }
 
@@ -2224,7 +2284,7 @@ describe('kaiku', () => {
   })
 
   it('should trigger effect using array method after item is pushed', async () => {
-    const effectCallCounter = jest.fn()
+    const effectCallCounter = mockFn()
     const state = createState({
       arr: [] as number[],
     })
@@ -2242,7 +2302,7 @@ describe('kaiku', () => {
   })
 
   it('should not track deep state changes made to shallow state', async () => {
-    const effectCallCounter = jest.fn()
+    const effectCallCounter = mockFn()
     const state = createShallowState({
       foo: {
         a: 0,
@@ -2267,7 +2327,7 @@ describe('kaiku', () => {
   })
 
   it('should not track deep state changes made to shallow sub-state of a normal state', async () => {
-    const effectCallCounter = jest.fn()
+    const effectCallCounter = mockFn()
     const subState = createShallowState({
       foo: {
         a: 0,

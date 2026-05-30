@@ -1,4 +1,4 @@
-import { DefaultProps, Child, NodeDescriptor } from './dist/kaiku'
+import { DefaultProps, Child, NodeDescriptor } from './dist'
 
 declare namespace JSX {
   type Element<T extends DefaultProps> = NodeDescriptor<T>

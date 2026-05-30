@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "emitDeclarationOnly": true,
+    "target": "esnext",
+
+    "strict": true,
+    "noImplicitAny": true,
+    "declaration": true,
+    "noUncheckedIndexedAccess": true,
+
+    "lib": ["DOM", "ESNext"]
+  },
+
+  "exclude": ["dist/", "jsx-runtime.d.ts"]
+}
