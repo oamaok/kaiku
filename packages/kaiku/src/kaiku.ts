@@ -804,6 +804,23 @@ const reuseNodeInstance = (
   }
 }
 
+const reuseOrReplaceChild = (
+  childDescriptor: NodeDescriptor<any>,
+  parentElement: Element,
+  existingChild: NodeInstance<any> | undefined
+): NodeInstance<any> => {
+  if (!existingChild) {
+    return createNodeInstance(childDescriptor, parentElement)
+  }
+
+  const wasReused = reuseNodeInstance(existingChild, childDescriptor)
+  if (wasReused) return existingChild
+
+  unmountNodeInstance(existingChild)
+  const newChild = createNodeInstance(childDescriptor, parentElement)
+  return newChild
+}
+
 const getKeyOfNodeDescriptor = (
   descriptor: NodeDescriptor<DefaultProps>
 ): string | number | null => {
@@ -816,6 +833,61 @@ const getKeyOfNodeDescriptor = (
   }
 
   return null
+}
+
+const updateNodeInstanceChildren = (
+  instance: FragmentInstance | HtmlElementInstance,
+  children: Child[]
+) => {
+  const childDescriptors = children.map(childToDescriptor)
+
+  // NOTE: The fragment children are stored in reverse order to make
+  // DOM operations on them easier.
+
+  instance.children_ = []
+  const nextkeys = new Set<string | number>()
+
+  // For fragments, the fragment's parent element will be the same
+  // for the children, as it is transparent in the DOM tree. For
+  // HTML elements, the element itself will be the children's parent.
+  const parentElement =
+    instance.tag_ === HtmlElementTag
+      ? instance.element_
+      : instance.parentElement_
+
+  for (let i = childDescriptors.length - 1; i >= 0; i--) {
+    const descriptor = childDescriptors[i]
+    assert?.(descriptor)
+
+    const descriptorKey = getKeyOfNodeDescriptor(descriptor)
+    const key = descriptorKey === null ? i : descriptorKey
+
+    if (__DEBUG__) {
+      if (nextkeys.has(key)) {
+        throw new Error(
+          'Duplicate key detected! Make sure no two sibling elements have the same key.'
+        )
+      }
+    }
+
+    nextkeys.add(key)
+
+    const child = reuseOrReplaceChild(
+      descriptor,
+      parentElement,
+      instance.childMap.get(key)
+    )
+
+    instance.children_.push(child)
+    instance.childMap.set(key, child)
+  }
+
+  for (const [key, child] of instance.childMap) {
+    if (!nextkeys.has(key)) {
+      unmountNodeInstance(child)
+      instance.childMap.delete(key)
+    }
+  }
 }
 
 //
@@ -972,78 +1044,6 @@ const createFragmentInstance = (
   updateNodeInstanceChildren(instance, descriptor.children_)
 
   return instance
-}
-
-const reuseOrReplaceChild = (
-  childDescriptor: NodeDescriptor<any>,
-  parentElement: Element,
-  existingChild: NodeInstance<any> | undefined
-): NodeInstance<any> => {
-  if (!existingChild) {
-    return createNodeInstance(childDescriptor, parentElement)
-  }
-
-  const wasReused = reuseNodeInstance(existingChild, childDescriptor)
-  if (wasReused) return existingChild
-
-  unmountNodeInstance(existingChild)
-  const newChild = createNodeInstance(childDescriptor, parentElement)
-  return newChild
-}
-
-const updateNodeInstanceChildren = (
-  instance: FragmentInstance | HtmlElementInstance,
-  children: Child[]
-) => {
-  const childDescriptors = children.map(childToDescriptor)
-
-  // NOTE: The fragment children are stored in reverse order to make
-  // DOM operations on them easier.
-
-  instance.children_ = []
-  const nextkeys = new Set<string | number>()
-
-  // For fragments, the fragment's parent element will be the same
-  // for the children, as it is transparent in the DOM tree. For
-  // HTML elements, the element itself will be the children's parent.
-  const parentElement =
-    instance.tag_ === HtmlElementTag
-      ? instance.element_
-      : instance.parentElement_
-
-  for (let i = childDescriptors.length - 1; i >= 0; i--) {
-    const descriptor = childDescriptors[i]
-    assert?.(descriptor)
-
-    const descriptorKey = getKeyOfNodeDescriptor(descriptor)
-    const key = descriptorKey === null ? i : descriptorKey
-
-    if (__DEBUG__) {
-      if (nextkeys.has(key)) {
-        throw new Error(
-          'Duplicate key detected! Make sure no two sibling elements have the same key.'
-        )
-      }
-    }
-
-    nextkeys.add(key)
-
-    const child = reuseOrReplaceChild(
-      descriptor,
-      parentElement,
-      instance.childMap.get(key)
-    )
-
-    instance.children_.push(child)
-    instance.childMap.set(key, child)
-  }
-
-  for (const [key, child] of instance.childMap) {
-    if (!nextkeys.has(key)) {
-      unmountNodeInstance(child)
-      instance.childMap.delete(key)
-    }
-  }
 }
 
 //
@@ -1234,7 +1234,6 @@ const updateHtmlElementInstance = (
   nextProps: HtmlElementProperties,
   children: Child[]
 ) => {
-  const keys = unionOfKeys(nextProps, instance.props_)
 
   // Handle the style prop
   const properties = unionOfKeys(
@@ -1258,6 +1257,8 @@ const updateHtmlElementInstance = (
   }
 
   // Handle properties other than `style`
+  const keys = unionOfKeys(nextProps, instance.props_)
+
   for (const key of keys) {
     if (key === 'style') continue
     if (key === 'key') continue
@@ -1471,6 +1472,12 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
       break
     }
 
+    case TextNodeTag: {
+      assert?.(instance.parentElement_)
+      instance.parentElement_.removeChild(instance.element_)
+      break
+    }
+
     case HtmlElementTag: {
       if (typeof instance.props_.ref !== 'undefined') {
         instance.props_.ref.current = undefined
@@ -1479,16 +1486,9 @@ const unmountNodeInstance = (instance: NodeInstance<DefaultProps>) => {
       instance.lazyUpdates?.forEach(removeDependencies)
       assert?.(instance.parentElement_)
       instance.parentElement_.removeChild(instance.element_)
-      if (instance.children_) {
-        instance.children_.forEach(unmountNodeInstance)
-      }
-      break
-    }
 
-    case TextNodeTag: {
-      assert?.(instance.parentElement_)
-      instance.parentElement_.removeChild(instance.element_)
-      break
+      // NOTE: Intentional case leakage. Unmounting for children
+      // is identical for element instances and fragment instances.
     }
 
     case FragmentTag: {
